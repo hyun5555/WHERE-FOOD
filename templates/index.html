@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Where Food - 날씨 기반 음식 추천</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <!-- 카카오 JavaScript 키 -->
+    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=e18d3ee9cbbf978c2e37e5fc08de3b81&libraries=services"></script>
+    
+    <style>
+        body {  background: linear-gradient(to bottom, rgba(200, 225, 255, 0.7), rgba(255, 255, 255, 1.0));
+        font-family: 'Noto Sans KR', sans-serif;
+        background-attachment: fixed; }
+        .hero-section { background: linear-gradient(to right, #F7971E, #FFD200);
+        color: white;
+        padding: 4rem 0;
+        margin-bottom: 2rem;
+        text-align: center; }
+        .card { transition: transform 0.2s; border: none; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .food-card { cursor: pointer; }
+        .food-card:hover { transform: translateY(-5px); background-color: #e9ecef; }
+        .weather-card { background-color: #ffffff; padding: 2rem; border-radius: 15px; min-height: 250px; }
+        .weather-icon { font-size: 4rem; color: #0d6efd; }
+        .food-card img { height: 200px; object-fit: cover; }
+        .section-title { font-weight: 700; margin-bottom: 1.5rem; }
+        #map { width: 100%; height: 770px; border-radius: 15px;}
+        #map-and-list-section { margin-top: 4rem !important; }
+        .list-group-item { border: none; border-width: 5px; border-color: #000000;}
+        #search-results-list .list-group-item:first-child { border-top-left-radius: .5rem;
+        border-top-right-radius: 15px;
+        border-top-width: 1px; }
+        #search-results-list .list-group-item:last-child {
+        border-bottom-left-radius: .5rem;
+        border-bottom-right-radius: 15px; }
+        #search-results-list {margin-top: 23px;}
+        #foodCarousel .carousel-control-prev-icon,
+        #foodCarousel .carousel-control-next-icon {
+        background-color: rgba(0, 0, 0, 0.4);
+        border-radius: 50%;
+        padding: 1.2rem;
+        background-size: 50%; }
+        #search-results-list .list-group-item.active {
+            color: var(--bs-body-color);
+            background-color: var(--bs-list-group-bg);
+            border-color: var(--bs-list-group-border-color);
+            
+				a{text-decoration:none;}
+				.wrap{padding:10px;}
+				
+				.pop_wrap{position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.5); font-size:0; text-align:center;}
+				.pop_wrap:after{display:inline-block; height:100%; vertical-align:middle; content:'';}
+				.pop_wrap .pop_inner{display:inline-block; padding:20px 30px; background:#fff; width:200px; vertical-align:middle; font-size:15px;}
+         }
+		.resultimg
+		{
+			width: 900px;
+			height: 700px;
+		}
+    </style>
+</head>
+<body>
+
+    <div class="hero-section">
+        <div class="container">
+            <h1 class="display-4">오늘 뭐 먹지?</h1>
+            <p class="lead">현재 날씨와 위치에 딱 맞는 음식을 추천해드려요!</p>
+            <div class="row justify-content-center mt-4">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <input type="text" id="location-search-input" class="form-control" placeholder="예: 강남역, 판교 " onkeydown="if(event.key === 'Enter') searchLocation()">
+                        <button class="btn btn-light" type="button" id="location-search-btn" onclick="searchLocation()">
+                            <i class="bi bi-search"></i> 검색
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 날씨 정보 표시 영역 -->
+        <div class="row justify-content-center mb-5">
+            <div class="col-lg-8">
+                <div class="weather-card d-flex justify-content-center align-items-center">
+                    <div id="weather-info" class="text-center" style="display: none;">
+                        <h2 id="location-name" class="section-title"><i class="bi bi-geo-alt-fill"></i></h2>
+                        <div class="d-flex justify-content-around align-items-center w-100">
+                            <div>
+                                <i id="weather-icon" class="bi weather-icon"></i>
+                                <p id="weather-description" class="fs-5 mb-0"></p>
+                            </div>
+                            <div class="text-center"> 
+                                <p id="temperature" class="display-4 mb-0"></p>
+                                <span id="humidity" class="text-muted d-block"></span>
+                                <span id="wind-speed" class="text-muted d-block"></span> 
+                            </div>
+                        </div>
+                    </div>
+                    <div id="loading" class="text-center">
+                        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+                        <p class="mt-2">위치 정보를 가져오는 중입니다...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 음식 추천 결과 -->
+       <div id="recommendation-section" style="display: none;">
+            <h2 class="text-center section-title">오늘의 추천 메뉴 😋</h2> 
+            <div style="text-align: center;">
+            <a href="#=" class="toggleLink" id="toggleLink" style="color: black; text-decoration: none;">분석 히트맵 조회 ▼</a>
+            </div>
+            <div id="toggleContent" style="display: none; text-align: center;">
+                <span id="resultImage">분석 히트맵 조회 내용입니다.</span>
+            </div>
+           
+            <p class="text-center text-muted mb-4">마음에 드는 음식을 클릭하여 주변 맛집을 찾아보세요!</p>
+            <div id="foodCarousel" class="carousel slide">
+                <div class="carousel-inner" id="recommendation-carousel-inner">
+                    <!-- 여기에 음식 리스트 나옴 -->
+                </div>
+                <button class="carousel-control-prev" type="button" data-bs-target="#foodCarousel" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                </button>
+                <button class="carousel-control-next" type="button" data-bs-target="#foodCarousel" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 지도와 맛집 리스트 -->
+        <div id="map-and-list-section" class="mt-5" style="display: none;">
+            <div class="row">
+                <div class="col-lg-8">
+                    <h2 id="map-title" class="section-title">주변 지도 🗺️</h2>
+                    <div id="map"></div>
+                </div>
+                <div class="col-lg-4">
+                    <!-- 맛집 리스트 제목과 정렬 버튼 -->
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h2 class="section-title mb-0">맛집 리스트</h2>
+                        <!-- 정렬 버튼 그룹 -->
+                        <div id="sort-buttons" class="btn-group btn-group-sm" role="group" style="display: none;">
+                            <button type="button" class="btn btn-outline-primary active" onclick="resortPlaces('accuracy')">정확도순</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('distance')">거리순</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('rating')">평점순</button>
+                        </div>
+                    </div>
+                    <!-- 맛집 목록이 표시될 곳 -->
+                    <div id="search-results-list">
+                        <p class="text-muted">추천 메뉴를 클릭하면 여기에 맛집 목록이 나타납니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer class="text-center text-muted py-4 mt-5">
+        <p>© 2025 날씨와 지역정보를 이용한 지능형 음식 추천 웹 서비스</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 여러 함수에서 공유해서 사용할 전역 변수
+        let map, mainMarker, ps;
+        let userPosition;
+        let markers = [];
+        let currentPlaces = []; // 현재 표시 중인 맛집 데이터 저장
+        let originalPlaces = []; 
+
+        window.addEventListener('DOMContentLoaded', () => {
+        
+            const mapContainer = document.getElementById('map');
+            const mapOption = { center: new kakao.maps.LatLng(37.566826, 126.9786567), level: 5 }; // 기본 위치: 서울시청
+            map = new kakao.maps.Map(mapContainer, mapOption);
+            ps = new kakao.maps.services.Places(); 
+            navigator.geolocation.getCurrentPosition(onSuccess, onError);
+        });
+
+        async function onSuccess(position) {
+            updateAllDataForLocation(position.coords.latitude, position.coords.longitude);
+        }
+
+        function onError(error) {
+            let message = "위치 정보를 가져올 수 없습니다.";
+            if (error.code === error.PERMISSION_DENIED) message = "위치 정보 접근 권한이 거부되었습니다.";
+            else if (error.code === error.POSITION_UNAVAILABLE) message = "현재 위치를 확인할 수 없습니다.";
+            else if (error.code === error.TIMEOUT) message = "위치 정보를 가져오는 데 시간이 초과되었습니다.";
+            document.getElementById('loading').innerHTML = `<p class="text-danger">${message}</p>`;
+        }
+
+        function updateWeatherUI(weather, location) {
+            console.log("✅ 서버로부터 받은 실제 날씨 데이터:", weather);
+            if (weather.error) {
+                document.getElementById('loading').innerHTML = `<p class="text-danger">${weather.error}</p>`;
+                return;
+            }
+            document.getElementById('location-name').innerHTML = `<i class="bi bi-geo-alt-fill"></i> ${location.name}`;
+            const { icon, description } = getWeatherVisuals(weather.rain_type_code, weather.sky_code);
+            document.getElementById('weather-icon').className = `bi ${icon} weather-icon`;
+            document.getElementById('weather-description').textContent = description;
+            document.getElementById('temperature').textContent = `${weather.temp.toFixed(1)}°C`;
+            document.getElementById('humidity').textContent = `습도: ${weather.humidity.toFixed(0)}%`;
+            document.getElementById('wind-speed').textContent = `풍속: ${weather.wind_speed.toFixed(1)} m/s`;
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('weather-info').style.display = 'block';
+        }
+
+        async function updateAllDataForLocation(lat, lon) {
+            userPosition = new kakao.maps.LatLng(lat, lon);
+
+            const loadingEl = document.getElementById('loading');
+            document.getElementById('weather-info').style.display = 'none';
+            loadingEl.style.display = 'block';
+            loadingEl.innerHTML = `<div class="spinner-border text-primary" role="status"></div><p class="mt-2">새로운 위치의 정보를 가져오는 중...</p>`;
+            
+            moveMainMarker(userPosition);
+            
+            document.getElementById('map-and-list-section').style.display = 'none';
+            removeMarkers();
+
+            try {
+                const response = await fetch('/get-initial-data', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ lat, lon }) 
+                });
+                if (!response.ok) throw new Error('서버에서 데이터를 가져오는 데 실패했습니다.');
+                
+                const data = await response.json();
+                
+                updateWeatherUI(data.weather, data.location);
+                updateRecommendationUI(data.recommendations);
+
+				//분석결과 이미지를 출력한다.
+				rand=Math.random();
+				document.getElementById("resultImage").innerHTML = "<img class='resultimg' src='/static/images/" + data.image + "?rand=" + rand + "'>";
+
+
+            } catch (error) {
+                loadingEl.innerHTML = `<p class="text-danger">${error.message}</p>`;
+            }
+        }
+        
+        function searchLocation() {
+            const keyword = document.getElementById('location-search-input').value;
+            if (!keyword.trim()) {
+                alert("검색할 장소를 입력해주세요.");
+                return;
+            }
+            ps.keywordSearch(keyword, (data, status) => {
+                if (status === kakao.maps.services.Status.OK) {
+                    const place = data[0];
+                    const lat = place.y;
+                    const lon = place.x;
+                    updateAllDataForLocation(lat, lon); // ★ 핵심 함수 호출
+                } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+                    alert('검색 결과가 존재하지 않습니다.');
+                } else {
+                    alert('장소 검색 중 오류가 발생했습니다.');
+                }
+            });
+        }
+        
+        function moveMainMarker(position) {
+            if (!mainMarker) { 
+                mainMarker = new kakao.maps.Marker({
+                    position: position,
+                    draggable: true 
+                });
+                mainMarker.setMap(map);
+
+                kakao.maps.event.addListener(mainMarker, 'dragend', function() {
+                    const newPosition = mainMarker.getPosition();
+                    updateAllDataForLocation(newPosition.getLat(), newPosition.getLng()); // ★ 핵심 함수 호출
+                });
+            }
+            mainMarker.setPosition(position); 
+            map.setCenter(position); 
+        }
+
+
+       function updateRecommendationUI(all_recommendations) {
+        const carouselInner = document.getElementById('recommendation-carousel-inner');
+            carouselInner.innerHTML = '';
+        
+            const foodImageMap = {
+                '치킨': '/static/images/치킨.png', '한식': '/static/images/한식.png', '족발/보쌈': '/static/images/족발.png',
+                '중식': '/static/images/중식.png', '돈까스/일식': '/static/images/일식.png', '아시안/양식': '/static/images/양식.png',
+                '피자': '/static/images/피자.png', '분식': '/static/images/분식.png', '회': '/static/images/회.png',
+                '패스트푸드': '/static/images/패스트푸드.png', '찜탕': '/static/images/찜탕.png','카페/디저트': '/static/images/카페.png',
+                '도시락': '/static/images/도시락.png',
+                'default': '/static/images/한식.png'
+            };
+            
+            const allCarouselFoods = all_recommendations;
+
+            let carouselHtml = '';
+            for (let i = 0; i < allCarouselFoods.length; i++) {
+                if (i % 3 === 0) {
+                    if (i > 0) carouselHtml += `</div></div>`;
+                    const activeClass = (i === 0) ? 'active' : '';
+                    carouselHtml += `<div class="carousel-item ${activeClass}"><div class="row row-cols-1 row-cols-md-3 g-4">`;
+                }
+
+                const food = allCarouselFoods[i];
+                const imageUrl = foodImageMap[food.name] || foodImageMap['default'];
+                
+                // food.prob에는 이제 항상 계산된 퍼센트 값이 들어있습니다.
+                carouselHtml += `
+                <div class="col">
+                    <div class="card h-100 food-card" onclick="searchAndDisplayPlaces('${food.name}')">
+                        <img src="${imageUrl}" class="card-img-top" alt="${food.name}">
+                        <div class="card-body text-center">
+                            <h5 class="card-title fw-bold">${food.name}</h5>
+                            <p class="card-text"><small class="text-muted">${food.prob}</small></p>
+                        </div>
+                    </div>
+                </div>`;
+            }
+
+            if (allCarouselFoods.length > 0) carouselHtml += `</div></div>`;
+            carouselInner.innerHTML = carouselHtml;
+            document.getElementById('recommendation-section').style.display = 'block';
+        }
+        
+       
+        // ❗️ 새로운 맛집 검색 및 표시 함수
+    async function searchAndDisplayPlaces(keyword) {
+        // 1. 맛집 지도 및 리스트 섹션을 화면에 표시하고 UI를 초기 상태로 설정합니다.
+        document.getElementById('map-and-list-section').style.display = 'block';
+        document.getElementById('map-title').textContent = `주변 '${keyword}' 맛집 지도 🗺️`;
+        document.getElementById('sort-buttons').style.display = 'flex';
+        setActiveSortButton('accuracy'); // 기본 정렬 버튼 활성화
+    
+        // 2. 검색 결과를 보여줄 리스트 영역에 로딩 스피너를 표시합니다.
+        const resultsListEl = document.getElementById('search-results-list');
+        resultsListEl.innerHTML = `
+            <div class="d-flex justify-content-center mt-3">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="ms-2 mb-0">맛집 정보 로딩 중...</p>
+            </div>`;
+    
+        // 2. [핵심] 캐시 키에 '위치 정보'를 추가합니다.
+        // 현재 사용자의 위도와 경도
+        const currentLat = userPosition.getLat();
+        const currentLon = userPosition.getLng();
+    
+        const locationKey = `${currentLat.toFixed(3)}_${currentLon.toFixed(3)}`;
+    
+        // 최종 캐시 키 = "places_음식카테고리_위치정보" (예: 'places_치킨_37.498_127.027')
+        const cacheKey = `places_${keyword}_${locationKey}`;
+        
+        //고유한 캐시 키로 데이터확인
+        const cachedData = sessionStorage.getItem(cacheKey);
+    
+        if (cachedData) {
+            //캐시가 있는 경우 (Cache Hit)
+            console.log(`[Cache Hit] '${cacheKey}'에 대한 캐시된 데이터를 사용합니다.`);
+            
+            const places = JSON.parse(cachedData);
+            
+            originalPlaces = [...places];
+            currentPlaces = [...places];
+            
+            displayPlaces(currentPlaces);
+            setTimeout(() => map.relayout(), 0);
+            
+            return; // API 호출 없이 함수 종료
+        }
+    
+        // 캐시가 없는 경우 (Cache Miss)
+        console.log(`[Cache Miss] '${cacheKey}'에 대한 데이터를 서버에서 가져옵니다.`);
+        try {
+            // API 호출 시에는 정확한 위도/경도를 사용합니다.
+            const response = await fetch('/search-places', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    keyword: keyword,
+                    lat: currentLat, // 정확한 위도
+                    lon: currentLon  // 정확한 경도
+                })
+            });
+    
+            if (!response.ok) {
+                throw new Error(`맛집 검색 서버 응답 오류: ${response.status}`);
+            }
+            
+            const places = await response.json();
+    
+            //캐시 키로 저장
+            sessionStorage.setItem(cacheKey, JSON.stringify(places));
+            console.log(`'${cacheKey}'에 대한 데이터를 캐시에 저장했습니다.`);
+    
+            originalPlaces = [...places];
+            currentPlaces = [...places];
+    
+            displayPlaces(currentPlaces);
+            setTimeout(() => map.relayout(), 0);
+    
+        } catch (error) {
+            console.error('맛집 검색 중 오류 발생:', error);
+            resultsListEl.innerHTML = `<p class="text-danger text-center mt-3">${error.message}</p>`;
+        }
+}
+
+    //정렬 버튼 클릭 시 호출되는 함수
+    function resortPlaces(sortBy) {
+        setActiveSortButton(sortBy);
+            if (!originalPlaces || originalPlaces.length === 0) return;
+
+            let sortedPlaces = [...originalPlaces]; 
+
+            if (sortBy === 'distance') {
+                // 거리 오름차순 (가까운 순)
+                sortedPlaces.sort((a, b) => a.distance - b.distance);
+            } else if (sortBy === 'rating') {
+                // 평점 내림차순 (높은 순), 평점이 같으면 리뷰 수 많은 순
+                sortedPlaces.sort((a, b) => {
+                    if (b.rating !== a.rating) return b.rating - a.rating;
+                    return b.review_count - a.review_count;
+                });
+            }
+        
+        currentPlaces = sortedPlaces;
+        displayPlaces(sortedPlaces);
+    }
+
+    //지도와 리스트를 한 번에 표시하는 통합 함수
+    function displayPlaces(places) {
+        displayPlacesOnMap(places);
+        displayPlacesOnList(places);
+    }
+    
+    function displayPlacesOnMap(places) {
+        // 1. 이전 맛집 마커들을 제거합니다. (메인 마커는 남겨둠)
+        removeMarkers(); 
+        const bounds = new kakao.maps.LatLngBounds();
+        
+        bounds.extend(mainMarker.getPosition()); 
+        
+        places.forEach((place, i) => {
+            addMarker(place, i);
+            bounds.extend(new kakao.maps.LatLng(place.y, place.x));
+        });
+        
+        if (places.length > 0) {
+            map.setBounds(bounds);
+        }
+        
+        map.setCenter(mainMarker.getPosition());
+    }
+
+    // 리스트에 맛집 정보 표시 (평점 표시 기능 추가)
+    function displayPlacesOnList(places) {
+        const listEl = document.getElementById('search-results-list');
+        listEl.innerHTML = '<ul class="list-group"></ul>';
+        const ulEl = listEl.querySelector('ul');
+
+        if (places.length === 0) {
+            listEl.innerHTML = `<p class="text-muted text-center mt-3">검색 결과가 없습니다.</p>`;
+            return;
+        }
+
+        places.slice(0, 5).forEach((place, i) => { // 최대 5개 표시
+            const itemEl = document.createElement('li');
+            itemEl.className = 'list-group-item';
+
+            let ratingHtml = place.rating > 0 
+                ? `<p class="mb-1"><span class="badge bg-warning text-dark">⭐ ${place.rating.toFixed(1)}</span> <span class="text-muted">리뷰 ${place.review_count}</span></p>`
+                : '<p class="mb-1"><span class="text-muted">평점 정보 없음</span></p>';
+            
+            let distanceHtml = place.distance 
+                ? `<p class="mb-1 text-primary"><small>현재 위치에서 ${place.distance}m</small></p>`
+                : '';
+
+            itemEl.innerHTML = `
+                <h6 class="mb-1 fw-bold">${i + 1}. ${place.place_name}</h6>
+                ${ratingHtml}
+                <p class="mb-1"><small>${place.road_address_name || place.address_name}</small></p>
+                ${distanceHtml}
+                <a href="${place.place_url}" target="_blank" class="btn btn-sm btn-outline-secondary">상세보기</a>
+                <a href="https://map.kakao.com/link/to/${place.id}" target="_blank" class="btn btn-sm btn-outline-primary">길찾기</a>
+            `;
+            ulEl.appendChild(itemEl);
+        });
+    }
+    
+    // 활성 버튼 스타일 변경
+    function setActiveSortButton(sortBy) {
+        document.querySelectorAll('#sort-buttons button').forEach(btn => btn.classList.remove('active'));
+        if (sortBy === 'distance') document.querySelector('#sort-buttons button:nth-child(2)').classList.add('active');
+        else if (sortBy === 'rating') document.querySelector('#sort-buttons button:nth-child(3)').classList.add('active');
+        else document.querySelector('#sort-buttons button:nth-child(1)').classList.add('active');
+    }
+        
+    function showSinglePlaceOnList(place) {
+    const listEl = document.getElementById('search-results-list');
+    
+    // 단일 항목을 표시할 HTML 생성
+    let ratingHtml = place.rating > 0 ? `<p class="mb-1"><span class="badge bg-warning text-dark">⭐ ${place.rating.toFixed(1)}</span> <span class="text-muted">리뷰 ${place.review_count}</span></p>` : '<p class="mb-1"><span class="text-muted">평점 정보 없음</span></p>';
+    let distanceHtml = place.distance ? `<p class="mb-1 text-primary"><small>현재 위치에서 ${place.distance}m</small></p>` : '';
+    
+    const singleItemHtml = `
+        <ul class="list-group">
+            <li class="list-group-item active"> <!-- active 클래스로 하이라이트 -->
+                <h6 class="mb-1 fw-bold">${place.place_name}</h6>
+                ${ratingHtml}
+                <p class="mb-1"><small>${place.road_address_name || place.address_name}</small></p>
+                ${distanceHtml}
+                <a href="${place.place_url}" target="_blank" class="btn btn-sm btn-outline-secondary">상세보기</a>
+                <a href="https://map.kakao.com/link/to/${place.id}" target="_blank" class="btn btn-sm btn-outline-primary">길찾기</a>
+            </li>
+        </ul>
+    `;
+    
+    const backButtonHtml = `<div class="d-grid mt-2"><button class="btn btn-outline-primary" onclick="displayPlacesOnList(currentPlaces.slice(0, 5))">전체 목록으로 돌아가기</button></div>`;
+    
+    listEl.innerHTML = singleItemHtml + backButtonHtml;
+    }
+        
+    function addMarker(place, idx) {
+        const placePosition = new kakao.maps.LatLng(place.y, place.x);
+        
+        const imageSrc = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png';
+        const imageSize = new kakao.maps.Size(36, 37);
+        const imgOptions = {
+            spriteSize: new kakao.maps.Size(36, 691),
+            spriteOrigin: new kakao.maps.Point(0, (idx * 46) + 10),
+            offset: new kakao.maps.Point(13, 37)
+        };
+        const markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imgOptions);
+        const marker = new kakao.maps.Marker({
+            position: placePosition,
+            image: markerImage,
+            title: place.place_name 
+        });
+        
+        kakao.maps.event.addListener(marker, 'click', function() {
+            showSinglePlaceOnList(place);
+        });
+        
+        marker.setMap(map);
+        markers.push(marker);
+        return marker;
+    }
+    
+    function removeMarkers() {
+        for (let i = 0; i < markers.length; i++) {
+            markers[i].setMap(null);
+        }   
+        markers = [];
+    }
+       
+        function getWeatherVisuals(rainType, sky) {
+            // rainType 또는 sky 값이 null, undefined, 빈 문자열일 경우를 대비한 기본값 설정
+            const safeRainType = String(rainType || '0');
+            const safeSky = String(sky || '1');
+        
+            // 1. 먼저 강수 형태(PTY)를 확인하여 비나 눈이 오는지 판단합니다.
+            switch (safeRainType) {
+                case '1': return { icon: 'bi-cloud-rain-fill', description: '비' };
+                case '2': return { icon: 'bi-cloud-sleet-fill', description: '비/눈' };
+                case '3': return { icon: 'bi-snow', description: '눈' };
+                case '4': return { icon: 'bi-cloud-lightning-rain-fill', description: '소나기' };
+                case '5': return { icon: 'bi-cloud-drizzle-fill', description: '빗방울' };
+                case '6': return { icon: 'bi-cloud-sleet-fill', description: '빗방울/눈날림' };
+                case '7': return { icon: 'bi-snow2', description: '눈날림' };
+                // case '0' (강수 없음)은 아래에서 처리
+            }
+        
+            // 2. 강수 형태가 '없음'일 경우, 하늘 상태(SKY)로 날씨를 판단합니다.
+            switch (safeSky) {
+                case '1': return { icon: 'bi-sun-fill', description: '맑음' };
+                case '3': return { icon: 'bi-cloud-sun-fill', description: '구름많음' };
+                case '4': return { icon: 'bi-clouds-fill', description: '흐림' };
+                default:  return { icon: 'bi-question-circle', description: '알 수 없음' };
+            }
+        }
+        
+    // 추천 이유 토글 
+   document.getElementById('toggleLink').addEventListener('click', function(event) {
+       event.preventDefault(); // 기본 동작 (페이지 이동) 방지
+       var content = document.getElementById('toggleContent');
+       if (content.style.display === 'none') {
+           content.style.display = 'block';
+       } else {
+           content.style.display = 'none';
+       }
+   });  
+   
+    </script>
+</body>
+</html>
