@@ -1,5 +1,9 @@
+import matplotlib
+matplotlib.use("Agg")
+
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from matplotlib import rc
 import matplotlib.ticker as mticker
 import seaborn as sns
@@ -13,9 +17,8 @@ def MakeImage(isshow,today_temp,today_humidity,today_rain) :
     global df
     
     # 한글 폰트 설정 (Windows 기준)
-    rc("font", family="gulim")
-    
-    plt.figure(figsize=(10, 4), dpi=600)
+    rc("font", family="AppleGothic")
+    mpl.rc('font', family='AppleGothic')
     
 
     if df is None :
@@ -54,7 +57,6 @@ def MakeImage(isshow,today_temp,today_humidity,today_rain) :
     
     
     #======================================================================================
-    import matplotlib as mpl
     import numpy as np
     import squarify  # <<< [변경] 트리맵 라이브러리 import
     
@@ -106,10 +108,14 @@ def MakeImage(isshow,today_temp,today_humidity,today_rain) :
         # 축 정보 숨기기
         plt.axis('off')
         
-        plt.savefig(".\\static\\images\\result.png")
+        plt.savefig("./static/images/result.png")
+        plt.close()
         
-        if isshow == True :
-            plt.show()
+        if isshow:
+            pass
+
+        #if isshow == True :
+        #    plt.show()
 
 """
 today_temp="보통"
