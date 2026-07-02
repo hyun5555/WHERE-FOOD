@@ -37,25 +37,57 @@
     <div class="container">
         <!-- 날씨 정보 표시 영역 -->
         <div class="row justify-content-center mb-5">
-            <div class="col-lg-8">
-                <div class="weather-card d-flex justify-content-center align-items-center">
-                    <div id="weather-info" class="text-center" style="display: none;">
-                        <h2 id="location-name" class="section-title"><i class="bi bi-geo-alt-fill"></i></h2>
-                        <div class="d-flex justify-content-around align-items-center w-100">
-                            <div>
-                                <i id="weather-icon" class="bi weather-icon"></i>
-                                <p id="weather-description" class="fs-5 mb-0"></p>
-                            </div>
-                            <div class="text-center"> 
-                                <p id="temperature" class="display-4 mb-0"></p>
-                                <span id="humidity" class="text-muted d-block"></span>
-                                <span id="wind-speed" class="text-muted d-block"></span> 
+            
+            <div class="col-lg-10">
+
+                <div class="weather-wrapper">
+                    <img src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/7gssixfe_expires_30_days.png" class="weather-box-icon"/>
+
+                    <div class="weather-card d-flex justify-content-center align-items-center">
+
+                        <div id="weather-info" class="weather-content" style="display: none;">
+
+                            <!-- 위치 -->
+                            <h2 id="location-name" class="section-title">
+                                <i class="bi bi-geo-alt-fill"></i>
+                            </h2>
+
+                            <div class="weather-main">
+                                <!-- 왼쪽 날씨 아이콘 -->
+                                <div class="weather-left">
+                                    <i id="weather-icon" class="bi weather-icon"></i>
+                                    <p id="weather-description" class="weather-description"></p>
+                                </div>
+
+                                <!-- 가운데 온도 -->
+                                <div class="weather-center">
+                                    <p id="temperature" class="temperature"></p>
+                                </div>
+
+                                <!-- 오른쪽 상세 정보 -->
+                                <div class="weather-right">
+                                    <div class="weather-detail-row">
+                                        <i class="bi bi-wind"></i>
+                                        <span class="detail-label">Wind</span>
+                                        <span id="wind-speed" class="detail-value"></span>
+                                    </div>
+
+                                    <div class="weather-detail-row">
+                                        <i class="bi bi-droplet"></i>
+                                        <span class="detail-label">Hum</span>
+                                        <span id="humidity" class="detail-value"></span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div id="loading" class="text-center">
-                        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
-                        <p class="mt-2">위치 정보를 가져오는 중입니다...</p>
+
+                        <div id="loading" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">위치 정보를 가져오는 중입니다...</p>
+                        </div>
+
                     </div>
                 </div>
             </div>
