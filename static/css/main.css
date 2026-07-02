@@ -152,7 +152,7 @@ body {
   font-weight: 800;
   /*color: #fff;*/
   text-shadow: 2px 3px 4px rgba(0, 0, 0, 0.22);
-  margin-bottom: 38px;
+  margin-bottom: 25px;
 }
 
 .section-title i {
@@ -164,6 +164,7 @@ body {
   align-items: center;
   justify-content: space-around;
   width: 100%;
+  margin-bottom: 10px;
 }
 
 .weather-left {
