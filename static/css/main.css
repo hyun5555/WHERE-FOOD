@@ -153,6 +153,7 @@ body {
   /*color: #fff;*/
   text-shadow: 2px 3px 4px rgba(0, 0, 0, 0.22);
   margin-bottom: 25px;
+  color: rgb(255, 255, 255);
 }
 
 .section-title i {
@@ -253,6 +254,20 @@ body {
 .section-title {
     font-weight: 700;
     margin-bottom: 1.5rem;
+    color: #B7B7B7;
+}
+
+#text-recommendation-food {
+    display: flex;
+    /* text-align: center; */
+    position: relative;
+    align-items: center;
+    text-align: center;
+    justify-content: center;
+}
+
+.text-muted {
+    color: #B7B7B7;
 }
 
 /* ===========================

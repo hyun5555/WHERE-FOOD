@@ -95,15 +95,22 @@
 
         <!-- 음식 추천 결과 -->
        <div id="recommendation-section" style="display: none;">
-            <h2 class="text-center section-title">오늘의 추천 메뉴 😋</h2> 
+            <div id="text-recommendation-food">
+                <img
+                    src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/nnnzrnz7_expires_30_days.png" 
+                    style="width: 54px; height: 89px; object-fit: fill; margin-bottom: 50px; margin-right: 10px;"
+                />
+                <h2 class="text-center section-title">오늘의 추천 메뉴</h2> 
+            </div>
+            
             <div style="text-align: center;">
-            <a href="#=" class="toggleLink" id="toggleLink" style="color: black; text-decoration: none;">분석 히트맵 조회 ▼</a>
+            <a href="#=" class="toggleLink" id="toggleLink" style="color: #B7B7B7; text-decoration: none;">분석 히트맵 조회 ▼</a>
             </div>
             <div id="toggleContent" style="display: none; text-align: center;">
                 <span id="resultImage">분석 히트맵 조회 내용입니다.</span>
             </div>
            
-            <p class="text-center text-muted mb-4">마음에 드는 음식을 클릭하여 주변 맛집을 찾아보세요!</p>
+            <p class="text-center text-muted mb-4" style="margin-top: 10px;">마음에 드는 음식을 클릭하여 주변 맛집을 찾아보세요!</p>
             <div id="foodCarousel" class="carousel slide">
                 <div class="carousel-inner" id="recommendation-carousel-inner">
                     <!-- 여기에 음식 리스트 나옴 -->
