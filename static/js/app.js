@@ -8,21 +8,58 @@ window.addEventListener('DOMContentLoaded', () => {
     map = new kakao.maps.Map(mapContainer, mapOption);
     ps = new kakao.maps.services.Places(); 
     
-    navigator.geolocation.getCurrentPosition(onSuccess, onError);
+    navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        onError,
+        {
+            enableHighAccuracy: false,   // Mac에서는 false가 더 안정적
+            timeout: 15000,              // 15초 후 실패 처리
+            maximumAge: 300000           // 5분 이내 캐시 위치 허용
+        }
+    );
 });
 
 
 async function onSuccess(position) {
-    updateAllDataForLocation(position.coords.latitude, position.coords.longitude);
+    console.log("위치 조회 성공");
+    console.log(position.coords);
+
+    updateAllDataForLocation(
+        position.coords.latitude,
+        position.coords.longitude
+    );
 }
 
 
 function onError(error) {
+    console.error("===== 위치 오류 =====");
+    console.error("code :", error.code);
+    console.error("message :", error.message);
+    console.error(error);
+
     let message = "위치 정보를 가져올 수 없습니다.";
-    if (error.code === error.PERMISSION_DENIED) message = "위치 정보 접근 권한이 거부되었습니다.";
-    else if (error.code === error.POSITION_UNAVAILABLE) message = "현재 위치를 확인할 수 없습니다.";
-    else if (error.code === error.TIMEOUT) message = "위치 정보를 가져오는 데 시간이 초과되었습니다.";
-    document.getElementById('loading').innerHTML = `<p class="text-danger">${message}</p>`;
+
+    if (error.code === error.PERMISSION_DENIED) {
+
+        message = "위치 권한이 거부되었습니다.";
+
+    } else if (error.code === error.POSITION_UNAVAILABLE) {
+
+        message = "현재 Wi-Fi에서 위치를 찾을 수 없습니다.";
+
+    } else if (error.code === error.TIMEOUT) {
+
+        message = "위치 조회 시간이 초과되었습니다.";
+
+    }
+
+    document.getElementById("loading").innerHTML = `
+        <p class="text-danger">${message}</p>
+        <button class="btn btn-light mt-2"
+                onclick="location.reload()">
+            다시 시도
+        </button>
+    `;
 }
 
 
