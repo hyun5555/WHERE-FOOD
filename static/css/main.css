@@ -267,7 +267,7 @@ body {
 }
 
 .text-muted {
-    color: #B7B7B7;
+    color: #B7B7B7 !important;
 }
 
 /* ===========================
