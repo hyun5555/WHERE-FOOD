@@ -130,19 +130,33 @@
         <div id="map-and-list-section" class="mt-5" style="display: none;">
             <div class="row">
                 <div class="col-lg-8">
-                    <h2 id="map-title" class="section-title">주변 지도 🗺️</h2>
+                    <div class="restaurant-title">
+                        <img src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/tqtofl0j_expires_30_days.png" 
+                            id="map-img"
+                        />
+                        <h2 id="map-title" class="section-title">주변 지도 </h2>
+                    </div>
+                    
                     <div id="map"></div>
                 </div>
                 <div class="col-lg-4">
                     <!-- 맛집 리스트 제목과 정렬 버튼 -->
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h2 class="section-title mb-0">맛집 리스트</h2>
-                        <!-- 정렬 버튼 그룹 -->
-                        <div id="sort-buttons" class="btn-group btn-group-sm" role="group" style="display: none;">
-                            <button type="button" class="btn btn-outline-primary active" onclick="resortPlaces('accuracy')">정확도순</button>
-                            <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('distance')">거리순</button>
-                            <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('rating')">평점순</button>
+
+                        <div class="restaurant-list">
+                            <img
+        						src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/jsm7vi82_expires_30_days.png" 
+        						style="position: absolute; left: -100px; width: 112px; height: 112px; object-fit: fill; transform: translateY(-35px);"
+        					/>
+                            <h2 class="section-title mb-0">맛집 리스트</h2>
+                            <!-- 정렬 버튼 그룹 -->
+                            <div id="sort-buttons" class="btn-group btn-group-sm" role="group" style="display: none; margin-left: 30px; transform: translateY(4px);">
+                                <button type="button" class="btn btn-outline-primary active" onclick="resortPlaces('accuracy')">정확도순</button>
+                                <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('distance')">거리순</button>
+                                <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('rating')">평점순</button>
+                            </div>
                         </div>
+                        
                     </div>
                     <!-- 맛집 목록이 표시될 곳 -->
                     <div id="search-results-list">
@@ -153,7 +167,7 @@
         </div>
     </div>
     <footer class="text-center text-muted py-4 mt-5">
-        <p>© 2025 날씨와 지역정보를 이용한 지능형 음식 추천 웹 서비스</p>
+        <p>© 날씨와 지역정보를 이용한 지능형 음식 추천 웹 서비스</p>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

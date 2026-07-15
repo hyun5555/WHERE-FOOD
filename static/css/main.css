@@ -286,6 +286,29 @@ body {
 /* ===========================
    Restaurant List
 =========================== */
+
+.restaurant-title {
+    display: flex;
+    align-items: flex-start;
+    /* margin-left: 16px; */
+}
+
+#map-img {
+    width: 64px; 
+    height: 64px;  
+    position: relative; 
+    object-fit: fill; 
+    transform: translateY(-16px);
+}
+
+.restaurant-list {
+    display: flex;
+    align-items: flex-start;
+    margin-left: 8px;
+    position: relative;
+}
+
+
 .list-group-item {
     border: none;
     border-width: 5px;
@@ -322,6 +345,8 @@ body {
     border-radius: 50%;
     padding: 1.2rem;
     background-size: 50%;
+    margin-top: 50px;
+    margin-bottom: 50px;
 }
 
 /* ===========================
