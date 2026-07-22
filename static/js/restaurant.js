@@ -138,7 +138,7 @@ function displayPlacesOnList(places) {
             ${ratingHtml}
             <p class="mb-1"><small>${place.road_address_name || place.address_name}</small></p>
             ${distanceHtml}
-            <a href="${place.place_url}" target="_blank" class="btn btn-sm btn-outline-secondary">상세보기</a>
+            <a href="${place.place_url}" target="_blank" class="btn btn-sm btn-outline-primary" id="restaurant-info">상세보기</a>
             <a href="https://map.kakao.com/link/to/${place.id}" target="_blank" class="btn btn-sm btn-outline-primary">길찾기</a>
         `;
         ulEl.appendChild(itemEl);

@@ -95,6 +95,7 @@ body {
 
 .food-card {
     cursor: pointer;
+    border-radius: 50px;
 }
 
 .food-card:hover {
@@ -105,6 +106,7 @@ body {
 .food-card img {
     height: 200px;
     object-fit: cover;
+    border-radius: 50px;
 }
 
 /* ===========================
@@ -243,9 +245,17 @@ body {
   font-size: 20px;
 }
 
-
-
-
+/* ===========================
+    AI food recommend
+=========================== */
+#ai-recommend {
+    margin-top: 100px;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 36px;
+}
 
 
 /* ===========================
@@ -274,7 +284,7 @@ body {
    Map
 =========================== */
 #map {
-    width: 100%;
+    width: 90%;
     height: 770px;
     border-radius: 15px;
 }
@@ -336,6 +346,10 @@ body {
     border-color: var(--bs-list-group-border-color);
 }
 
+#restaurant-info {
+    margin-right: 10px
+}
+
 /* ===========================
    Carousel
 =========================== */
@@ -358,6 +372,29 @@ a {
 
 .wrap {
     padding: 10px;
+}
+
+.btn-outline-primary {
+    background: #FFFFFF;
+    border-radius: 20px;
+    border: none;
+    padding: 5px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    color: #B7B7B7;
+    font-weight: bold;
+}
+
+.btn-outline-primary:hover {
+    
+    background-color: #AAD8FF;
+}
+
+.btn-check:checked+.btn,
+.btn.active, .btn.show,
+.btn:first-child:active, 
+:not(.btn-check)+.btn:active {
+    background-color: #acd8f8;
+    border-color: #acd8f8;
 }
 
 /* ===========================
