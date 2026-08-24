@@ -11,10 +11,10 @@ function updateWeatherUI(weather, location) {
     document.getElementById('weather-icon').className = `bi ${icon} weather-icon`;
     document.getElementById('weather-description').textContent = description;
     document.getElementById('temperature').textContent = `${weather.temp.toFixed(1)}°C`;
-    document.getElementById('humidity').textContent = `습도: ${weather.humidity.toFixed(0)}%`;
-    document.getElementById('wind-speed').textContent = `풍속: ${weather.wind_speed.toFixed(1)} m/s`;
+    document.getElementById('humidity').textContent = `${weather.humidity.toFixed(0)}%`;
+    document.getElementById('wind-speed').textContent = `${weather.wind_speed.toFixed(1)} m/s`;
     document.getElementById('loading').style.display = 'none';
-    document.getElementById('weather-info').style.display = 'block';
+    document.getElementById('weather-info').hidden = false;
 }
 
 function getWeatherVisuals(rainType, sky) {

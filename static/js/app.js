@@ -1,6 +1,10 @@
 //페이지 시작, 위치 조회, 전체 데이터 호출 담당
 
 window.addEventListener('DOMContentLoaded', () => {
+    if (typeof kakao === 'undefined') {
+        document.getElementById('loading').innerHTML = '<p>지도 서비스를 불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>';
+        return;
+    }
 
     const mapContainer = document.getElementById('map');
     const mapOption = { center: new kakao.maps.LatLng(37.566826, 126.9786567), level: 5 }; // 기본 위치: 서울시청
@@ -67,13 +71,13 @@ async function updateAllDataForLocation(lat, lon) {
     userPosition = new kakao.maps.LatLng(lat, lon);
 
     const loadingEl = document.getElementById('loading');
-    document.getElementById('weather-info').style.display = 'none';
+    document.getElementById('weather-info').hidden = true;
     loadingEl.style.display = 'block';
     loadingEl.innerHTML = `<div class="spinner-border text-primary" role="status"></div><p class="mt-2">새로운 위치의 정보를 가져오는 중...</p>`;
     
     moveMainMarker(userPosition);
     
-    document.getElementById('map-and-list-section').style.display = 'none';
+    document.getElementById('map-and-list-section').hidden = true;
     removeMarkers();
 
     try {

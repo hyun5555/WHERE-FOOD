@@ -3,221 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f6f8fb">
     <title>Where Food - 날씨 기반 음식 추천</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=Nunito:wght@300;400&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/static/css/main.css">
-    <!-- 카카오 JavaScript 키 -->
-    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=e18d3ee9cbbf978c2e37e5fc08de3b81&libraries=services"></script>
-    
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=e18d3ee9cbbf978c2e37e5fc08de3b81&libraries=services"></script>
 </head>
 <body>
+    <header class="site-header">
+        <a class="brand" href="/" aria-label="Where Food 홈">
+            <span class="brand-mark">W</span>
+            <span>WHERE FOOD</span>
+        </a>
+        <span class="header-caption">오늘의 날씨가 골라주는 한 끼</span>
+    </header>
 
-    <div class="hero-section">
-        <div class="container">
-            <h1 class="display-4">오늘 뭐 먹지?</h1>
-            <p class="lead">현재 날씨와 위치에 딱 맞는 음식을 추천해드려요!</p>
-            <div class="row justify-content-center mt-4">
-                <div class="col-md-6">
-                    <div class="input-group">
-                        <img src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/vvsc0qnm_expires_30_days.png" class="location-icon"/>
-                        <input type="text" id="location-search-input" class="form-control" placeholder="search location " onkeydown="if(event.key === 'Enter') searchLocation()">
-                        <button class="btn btn-light" type="button" id="location-search-btn" onclick="searchLocation()">
-                            <i class="bi bi-search"></i>
-                        </button>
-                    </div>
-                </div>
+    <main>
+        <section class="hero-section">
+            <div class="hero-copy">
+                <span class="eyebrow"><i class="bi bi-stars"></i> WEATHER-BASED MENU</span>
+                <h1>오늘 뭐 먹지?</h1>
+                <p>내 주변 날씨와 취향을 읽고, 지금 가장 어울리는 메뉴를 추천해드려요.</p>
             </div>
-        </div>
-    </div>
-
-    <div class="container">
-        <!-- 날씨 정보 표시 영역 -->
-        <div class="row justify-content-center mb-5">
-            
-            <div class="col-lg-10">
-
-                <div class="weather-wrapper">
-                    <img src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/7gssixfe_expires_30_days.png" class="weather-box-icon"/>
-
-                    <div class="weather-card d-flex justify-content-center align-items-center">
-
-                        <div id="weather-info" class="weather-content" style="display: none;">
-
-                            <!-- 위치 -->
-                            <h2 id="location-name" class="section-title">
-                                <i class="bi bi-geo-alt-fill"></i>
-                            </h2>
-
-                            <div class="weather-main">
-                                <!-- 왼쪽 날씨 아이콘 -->
-                                <div class="weather-left">
-                                    <i id="weather-icon" class="bi weather-icon"></i>
-                                    <p id="weather-description" class="weather-description"></p>
-                                </div>
-
-                                <!-- 가운데 온도 -->
-                                <div class="weather-center">
-                                    <p id="temperature" class="temperature"></p>
-                                </div>
-
-                                <!-- 오른쪽 상세 정보 -->
-                                <div class="weather-right">
-                                    <div class="weather-detail-row">
-                                        <i class="bi bi-wind"></i>
-                                        <span class="detail-label">Wind</span>
-                                        <span id="wind-speed" class="detail-value"></span>
-                                    </div>
-
-                                    <div class="weather-detail-row">
-                                        <i class="bi bi-droplet"></i>
-                                        <span class="detail-label">Hum</span>
-                                        <span id="humidity" class="detail-value"></span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div id="loading" class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">위치 정보를 가져오는 중입니다...</p>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 음식 추천 결과 -->
-       <div id="recommendation-section" style="display: none;">
-            <div id="text-recommendation-food">
-                <img
-                    src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/nnnzrnz7_expires_30_days.png" 
-                    style="width: 54px; height: 89px; object-fit: fill; margin-bottom: 50px; margin-right: 10px;"
-                />
-                <h2 class="text-center section-title">오늘의 추천 메뉴</h2> 
-            </div>
-            
-            <div style="text-align: center;">
-            <a href="#=" class="toggleLink" id="toggleLink" style="color: #B7B7B7; text-decoration: none;">분석 히트맵 조회 ▼</a>
-            </div>
-            <div id="toggleContent" style="display: none; text-align: center;">
-                <span id="resultImage">분석 히트맵 조회 내용입니다.</span>
-            </div>
-           
-            <p class="text-center text-muted mb-4" style="margin-top: 10px;">마음에 드는 음식을 클릭하여 주변 맛집을 찾아보세요!</p>
-            <div id="foodCarousel" class="carousel slide">
-                <div class="carousel-inner" id="recommendation-carousel-inner">
-                    <!-- 여기에 음식 리스트 나옴 -->
-                </div>
-                <button class="carousel-control-prev" type="button" data-bs-target="#foodCarousel" data-bs-slide="prev">
-                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                    <span class="visually-hidden">Previous</span>
-                </button>
-                <button class="carousel-control-next" type="button" data-bs-target="#foodCarousel" data-bs-slide="next">
-                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                    <span class="visually-hidden">Next</span>
+            <div class="location-search input-group" role="search">
+                <i class="bi bi-geo-alt location-icon" aria-hidden="true"></i>
+                <label class="visually-hidden" for="location-search-input">지역 검색</label>
+                <input type="search" id="location-search-input" class="form-control" placeholder="동네나 장소를 검색해보세요" onkeydown="if(event.key === 'Enter') searchLocation()">
+                <button class="btn" type="button" id="location-search-btn" onclick="searchLocation()" aria-label="지역 검색">
+                    <i class="bi bi-search"></i>
                 </button>
             </div>
-        </div>
+        </section>
 
-
-        <!-- AI 음식 추천 받기 -->
-         <div id="ai-recommend">
-			<div style="display: flex; flex-direction: column; align-items: flex-start;">
-				<span style="color: #B7B7B7; font-size: 35px; font-weight: bold; margin-bottom: 21px;" >
-					AI를 통해 상세한 메뉴 추천을 받으시겠습니까?
-				</span>
-				<div style="display: flex; align-items: center; margin-bottom: 30px; margin-left: 260px; gap: 13px;">
-					<button style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; background: #FFFFFF; border-radius: 20px; border: none; padding: 9px 22px; box-shadow: -3.4200000762939453px 2.2799999713897705px 2px #D4D4D41A; text-align: left;"
-						onclick="alert('Pressed!')"}>
-						<span style="color: #A8D2F6; font-size: 20px; font-weight: bold;" >
-							예
-						</span>
-					</button>
-					<button style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; background: #FFFFFF; border-radius: 20px; border: none; padding: 8px 24px; box-shadow: -3.4200000762939453px 2.2799999713897705px 2px #D4D4D41A; text-align: left;"
-						onclick="alert('Pressed!')"}>
-						<span style="color: #B7B7B7; font-size: 20px; font-weight: bold;" >
-							아니오
-						</span>
-					</button>
-				</div>
-				<div style="display: flex; flex-direction: column; align-items: flex-start; padding-bottom: 10px; margin-left: 44px; gap: 32px;">
-					<span style="color: #BBBBBB; font-size: 25px; font-weight: bold; margin-left: 152px;" >
-						오늘 어떤 음식이 땡기시나요?
-					</span>
-					<span style="color: #BBBBBB; font-size: 20px; font-weight: bold; margin-left: 17px; margin-right: 107px;" >
-						땡기는 음식 유형을 입력해주세요 ex) 매운음식, 달콤한 음식..
-					</span>
-				</div>
-				<div style="width: 622px; height: 3px; background: #B7B7B7CC; margin-bottom: 21px; margin-left: 44px;">
-				</div>
-				<button style="display: flex; flex-direction: column; align-items: flex-start; background: #FFFFFF; border-radius: 20px; border: none; padding: 9px 23px; margin-left: 252px; box-shadow: -3.4200000762939453px 2.2799999713897705px 2px #D4D4D41A; text-align: left;"
-					onclick="alert('Pressed!')"}>
-					<span style="color: #A8D2F6; font-size: 25px; font-weight: bold;" >
-						AI 추천받기
-					</span>
-				</button>
-			</div>
-		</div>
-        
-        <!-- 지도와 맛집 리스트 -->
-        <div id="map-and-list-section" class="mt-5" style="display: none;">
-            <div class="row">
-                <div class="col-lg-8">
-                    <div class="restaurant-title">
-                        <img src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/tqtofl0j_expires_30_days.png" 
-                            id="map-img"
-                        />
-                        <h2 id="map-title" class="section-title">주변 지도 </h2>
-                    </div>
-                    
-                    <div id="map"></div>
-                </div>
-                <div class="col-lg-4">
-                    <!-- 맛집 리스트 제목과 정렬 버튼 -->
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-
-                        <div class="restaurant-list">
-                            <img
-        						src="https://storage.googleapis.com/tagjs-prod.appspot.com/v1/dVvoNoBrKq/jsm7vi82_expires_30_days.png" 
-        						style="position: absolute; left: -100px; width: 112px; height: 112px; object-fit: fill; transform: translateY(-35px);"
-        					/>
-                            <h2 class="section-title mb-0">맛집 리스트</h2>
-                            <!-- 정렬 버튼 그룹 -->
-                            <div id="sort-buttons" class="btn-group btn-group-sm" role="group" style="display: none; margin-left: 30px; transform: translateY(4px);">
-                                <button type="button" class="btn btn-outline-primary active" onclick="resortPlaces('accuracy')">정확도순</button>
-                                <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('distance')">거리순</button>
-                                <button type="button" class="btn btn-outline-primary" onclick="resortPlaces('rating')">평점순</button>
+        <div class="page-container">
+            <section class="weather-wrapper" aria-labelledby="location-name">
+                <div class="weather-card">
+                    <div id="weather-info" class="weather-content" hidden>
+                        <h2 id="location-name" class="weather-location"><i class="bi bi-geo-alt-fill"></i></h2>
+                        <div class="weather-main">
+                            <div class="weather-left">
+                                <i id="weather-icon" class="bi weather-icon" aria-hidden="true"></i>
+                                <p id="weather-description" class="weather-description"></p>
+                            </div>
+                            <p id="temperature" class="temperature"></p>
+                            <div class="weather-right">
+                                <div class="weather-detail-row">
+                                    <i class="bi bi-wind" aria-hidden="true"></i>
+                                    <span class="detail-label">바람</span>
+                                    <span id="wind-speed" class="detail-value"></span>
+                                </div>
+                                <div class="weather-detail-row">
+                                    <i class="bi bi-droplet" aria-hidden="true"></i>
+                                    <span class="detail-label">습도</span>
+                                    <span id="humidity" class="detail-value"></span>
+                                </div>
                             </div>
                         </div>
-                        
                     </div>
-                    <!-- 맛집 목록이 표시될 곳 -->
+                    <div id="loading" class="weather-loading" role="status" aria-live="polite">
+                        <div class="spinner-border" aria-hidden="true"></div>
+                        <p>현재 위치의 날씨를 확인하고 있어요.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="recommendation-section" class="content-section" hidden>
+                <div class="section-heading">
+                    <div>
+                        <span class="section-kicker">TODAY'S PICK</span>
+                        <h2><img src="/static/images/Hands005.png" alt="">오늘의 추천 메뉴</h2>
+                        <p>마음에 드는 메뉴를 누르면 가까운 맛집을 찾아드려요.</p>
+                    </div>
+                    <button class="heatmap-toggle" id="toggleLink" type="button" aria-expanded="false" aria-controls="toggleContent">
+                        <i class="bi bi-bar-chart"></i> 분석 결과 보기
+                    </button>
+                </div>
+                <div id="toggleContent" class="heatmap-panel" hidden>
+                    <span id="resultImage">분석 결과를 불러오는 중입니다.</span>
+                </div>
+                <div id="foodCarousel" class="carousel slide">
+                    <div class="carousel-inner" id="recommendation-carousel-inner"></div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#foodCarousel" data-bs-slide="prev">
+                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">이전 메뉴</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#foodCarousel" data-bs-slide="next">
+                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">다음 메뉴</span>
+                    </button>
+                </div>
+            </section>
+
+            <section id="ai-recommend" class="ai-card" aria-labelledby="ai-title">
+                <div class="ai-card-header">
+                    <span class="ai-icon"><i class="bi bi-stars"></i></span>
+                    <div>
+                        <span class="section-kicker">PERSONALIZED PICK</span>
+                        <h2 id="ai-title">AI에게 더 자세히 추천받으시겠어요?</h2>
+                        <p>한마디 취향을 더하면 지금 마음에 가까운 메뉴를 찾아드릴게요.</p>
+                    </div>
+                </div>
+                <div class="ai-choice" role="group" aria-label="AI 상세 추천 선택">
+                    <button type="button" id="ai-yes-btn" class="choice-button" aria-expanded="false" aria-controls="ai-preference-section">예</button>
+                    <button type="button" id="ai-no-btn" class="choice-button" aria-expanded="false" aria-controls="ai-preference-section">아니오</button>
+                </div>
+                <div id="ai-preference-section" class="ai-preference" hidden>
+                    <form id="ai-preference-form">
+                        <label for="food-preference">오늘 어떤 음식이 땡기시나요?</label>
+                        <p>맛, 식감, 분위기처럼 지금 떠오르는 느낌을 자유롭게 적어주세요.</p>
+                        <div class="preference-input-row">
+                            <input type="text" id="food-preference" name="preference" placeholder="예: 얼큰하고 매운 음식, 가벼운 한 끼" autocomplete="off" required>
+                            <button type="submit"><i class="bi bi-stars"></i> AI 추천받기</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section id="map-and-list-section" class="content-section map-list-section" hidden>
+                <div class="map-column">
+                    <div class="section-heading compact">
+                        <div>
+                            <span class="section-kicker">NEARBY</span>
+                            <h2 id="map-title"><img src="/static/images/map_img.png" id="map-img" alt="">주변 맛집 지도</h2>
+                        </div>
+                    </div>
+                    <div id="map" aria-label="주변 맛집 지도"></div>
+                </div>
+                <div class="list-column">
+                    <div class="restaurant-list-header">
+                        <div>
+                            <span class="section-kicker">RESTAURANTS</span>
+                            <h2><img src="/static/images/3_Star.png" alt="">맛집 리스트</h2>
+                        </div>
+                        <div id="sort-buttons" class="sort-buttons" role="group" aria-label="맛집 정렬" hidden>
+                            <button type="button" class="active" onclick="resortPlaces('accuracy')">정확도</button>
+                            <button type="button" onclick="resortPlaces('distance')">거리순</button>
+                            <button type="button" onclick="resortPlaces('rating')">평점순</button>
+                        </div>
+                    </div>
                     <div id="search-results-list">
-                        <p class="text-muted">추천 메뉴를 클릭하면 여기에 맛집 목록이 나타납니다.</p>
+                        <p class="empty-message">추천 메뉴를 누르면 맛집 목록이 나타납니다.</p>
                     </div>
                 </div>
-            </div>
+            </section>
         </div>
-    </div>
-    <footer class="text-center text-muted py-4 mt-5">
-        <p>© 날씨와 지역정보를 이용한 지능형 음식 추천 웹 서비스</p>
-    </footer>
+    </main>
+
+    <footer>© 날씨와 지역정보를 이용한 지능형 음식 추천 웹 서비스</footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    
     <script src="/static/js/state.js"></script>
     <script src="/static/js/map.js"></script>
     <script src="/static/js/weather.js"></script>
     <script src="/static/js/restaurant.js"></script>
     <script src="/static/js/recommend.js"></script>
     <script src="/static/js/app.js"></script>
-
 </body>
 </html>

@@ -3,9 +3,9 @@
 // ❗️ 새로운 맛집 검색 및 표시 함수
 async function searchAndDisplayPlaces(keyword) {
     // 1. 맛집 지도 및 리스트 섹션을 화면에 표시하고 UI를 초기 상태로 설정합니다.
-    document.getElementById('map-and-list-section').style.display = 'block';
+    document.getElementById('map-and-list-section').hidden = false;
     document.getElementById('map-title').textContent = `주변 '${keyword}' 맛집 지도 🗺️`;
-    document.getElementById('sort-buttons').style.display = 'flex';
+    document.getElementById('sort-buttons').hidden = false;
     setActiveSortButton('accuracy'); // 기본 정렬 버튼 활성화
 
     // 2. 검색 결과를 보여줄 리스트 영역에 로딩 스피너를 표시합니다.
