@@ -4,8 +4,10 @@ from flask_caching import Cache
 import requests
 import datetime
 import math
+import os
 import joblib
 import pandas as pd
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -24,6 +26,8 @@ import genimg as  gn
 app = Flask(__name__)
 CORS(app)
 
+load_dotenv()
+
 config = {
     "DEBUG": True,
     "CACHE_TYPE": "SimpleCache", 
@@ -32,10 +36,8 @@ config = {
 app.config.from_mapping(config)
 cache = Cache(app)
 
-# ❗️ 카카오 REST API 키
-KAKAO_API_KEY = "REDACTED"
-# ❗️ 기상청 API 키 디코딩
-WEATHER_API_KEY = "REDACTED"
+KAKAO_API_KEY = os.environ["KAKAO_REST_API_KEY"]
+WEATHER_API_KEY = os.environ["WEATHER_API_KEY"]
 
 
 #--- ✅ 1. 모델 및 통계 테이블 로드/생성 (서버 시작 시) ---
