@@ -15,7 +15,7 @@ function updateRecommendationUI(recommendations) {
         const imageUrl = foodImageMap[food.name] || foodImageMap.default;
         return html + `
             <div class="col">
-                <button type="button" class="card h-100 food-card w-100" onclick="searchAndDisplayPlaces('${food.name}')" aria-label="${food.name} 주변 맛집 보기">
+                <button type="button" class="card h-100 food-card w-100" onclick="selectFood('${food.name}')" aria-label="${food.name} 선택">
                     <span class="food-rank">${index + 1}위</span>
                     <img src="${imageUrl}" class="card-img-top" alt="">
                     <span class="card-body text-center">
@@ -27,6 +27,16 @@ function updateRecommendationUI(recommendations) {
     }, '') + (recommendations.length ? '</div></div>' : '');
 
     document.getElementById('recommendation-section').hidden = false;
+    selectedFood = null;
+    document.getElementById('ai-recommend').hidden = true;
+}
+
+function selectFood(foodName) {
+    selectedFood = foodName;
+    setPreferenceVisible(false);
+    noButton.classList.remove('active');
+    document.getElementById('ai-recommend').hidden = false;
+    document.getElementById('ai-recommend').scrollIntoView({ behavior: 'smooth' });
 }
 
 const heatmapToggle = document.getElementById('toggleLink');
@@ -54,7 +64,12 @@ function setPreferenceVisible(visible) {
 }
 
 yesButton.addEventListener('click', () => setPreferenceVisible(true));
-noButton.addEventListener('click', () => setPreferenceVisible(false));
+noButton.addEventListener('click', () => {
+    if (!selectedFood) return;
+    setPreferenceVisible(false);
+    searchAndDisplayPlaces(selectedFood);
+    document.getElementById('map-and-list-section').scrollIntoView({ behavior: 'smooth' });
+});
 
 document.getElementById('ai-preference-form').addEventListener('submit', event => {
     event.preventDefault();

@@ -274,7 +274,7 @@ def get_initial_data():
     if total_score > 0:
         recommendations = [
             {"name": name, "prob": f"{(max(0, score) / total_score) * 100:.2f}%"}
-            for name, score in sorted_scores
+            for name, score in sorted_scores[:3]
         ]
     
     final_data = {

@@ -1,4 +1,4 @@
 .env
 venv/
-**/__pycache__/
+__pycache__/
 배달_음식추천용_최종데이터_가공05.csv
