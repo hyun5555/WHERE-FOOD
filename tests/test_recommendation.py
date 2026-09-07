@@ -3,7 +3,7 @@
 Synthetic evidence is confined to these tests and is never imported to the app DB.
 """
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase, main
@@ -14,18 +14,18 @@ from io import StringIO
 import json
 import os
 
-from app import app, convert_grid
+from app import app, convert_grid, weather_ranking
 import db
 import recommendation as rec
 from scripts.import_menu_data import import_csv
-from scripts.evaluate_parser import evaluate, EMPTY
+from scripts.evaluate_parser import evaluate, EMPTY, CASES
 
 
 def constraints(**changes):
     values = dict(location_text=None, walking_minutes_max=10, max_distance_m=None,
                   budget_krw=15000, excluded_ingredients=["땅콩"], allergens=[],
                   excluded_foods=[], dish_tags=["얼큰한", "국물"], atmosphere_tags=["조용한"],
-                  hard_fields=[], unknown_terms=[], source_spans=[])
+                  hard_fields=[], dietary_requirements=[], open_now=False, unknown_terms=[], source_spans=[])
     values.update(changes)
     return rec.MealConstraints(**values)
 
@@ -65,6 +65,9 @@ class MealFlowTest(TestCase):
         env_patch = patch.dict(os.environ, {"WHERE_FOOD_OLLAMA_TIMEOUT_SECONDS": "120"})
         env_patch.start()
         self.addCleanup(env_patch.stop)
+        weather_patch = patch("app.weather_ranking", return_value={"scores": {}, "available": False})
+        self.weather_ranking = weather_patch.start()
+        self.addCleanup(weather_patch.stop)
 
     def mock_ollama(self, content=None, **changes):
         data = dict(done=True, done_reason="stop", message={"content": content or "{}"})
@@ -157,7 +160,156 @@ class MealFlowTest(TestCase):
         self.assertTrue(rec.checks_for_menu(record, constraints(allergens=["땅콩"]))[0])
 
     def test_hard_atmosphere_rejects_unknown(self):
-        self.assertIn("필수 특성 '조용한' 미확인", rec.checks_for_menu(menu(), constraints(hard_fields=["atmosphere_tags"]))[0])
+        self.assertIn("필수 특성 '조용한' 미확인", rec.check_preferences(menu(), constraints(hard_fields=["atmosphere_tags"]))[0])
+
+    def test_diet_requires_exact_fresh_evidence_not_menu_name(self):
+        for diet in ("vegan", "vegetarian", "pescatarian"):
+            c = constraints(dietary_requirements=[diet])
+            self.assertTrue(rec.checks_for_menu(menu(menu_name="비건 샐러드"), c)[0])
+            good = dict(term=diet, evidence=evidence())
+            self.assertFalse(rec.checks_for_menu(menu(dietary_checks=[good]), c)[0])
+            good["evidence"]["observed_on"] = (date.today() - timedelta(days=91)).isoformat()
+            self.assertTrue(rec.checks_for_menu(menu(dietary_checks=[good]), c)[0])
+        # Vegan classification is not evidence of allergy/cross-contact safety.
+        c = constraints(dietary_requirements=["vegan"], allergens=["우유"])
+        self.assertTrue(rec.checks_for_menu(menu(dietary_checks=[dict(term="vegan", evidence=evidence())]), c)[0])
+
+    def test_hard_failure_priority(self):
+        c = constraints(allergens=["우유"], dietary_requirements=["vegan"], excluded_foods=["회"])
+        failures, _, _ = rec.checks_for_menu(menu(price_krw=20000, absent_ingredients=[]), c)
+        self.assertEqual(failures, ["우유 알레르기·교차접촉 확인 근거 없음", "비건 식단 확인 근거 없음",
+                                    "땅콩 미사용 근거 없음", "회 제외 근거 없음", "예산 초과"])
+
+    def test_opening_status_requires_current_trusted_record(self):
+        now = datetime.now(timezone.utc)
+        opening = dict(is_open=True, provider="merchant_confirmed", observed_at=now,
+                       valid_until=now + timedelta(minutes=10), evidence=evidence())
+        c = constraints(open_now=True)
+        result = self.call_recommend(records=[menu("1", opening_status=opening), menu("2")], c=c).get_json()
+        self.assertEqual([p["id"] for p in result["recommendations"]], ["1"])
+        self.assertIn("현재 영업 여부 미확인", result["diagnostics"]["rejected"])
+        self.assertTrue(result["recommendations"][0]["opening_status"]["is_open"])
+        with self.assertRaises(rec.ValidationError):
+            rec.OpeningStatus(**{**opening, "provider": "unverified_blog"})
+        with self.assertRaises(rec.ValidationError):
+            rec.OpeningStatus(**{**opening, "valid_until": now + timedelta(hours=1)})
+        with self.assertRaises(rec.ValidationError):
+            rec.OpeningStatus(**{**opening, "observed_at": now.replace(tzinfo=None)})
+
+    def test_opening_closed_stale_future_and_expiry_boundary(self):
+        now = datetime.now(timezone.utc)
+        base = dict(is_open=True, provider="official", observed_at=now,
+                    valid_until=now + timedelta(minutes=10), evidence=evidence())
+        record = rec.OpeningStatus(**base)
+        self.assertTrue(record.current(now))
+        self.assertFalse(record.current(record.valid_until))
+        records = [
+            menu("1", opening_status={**base, "is_open": False}),
+            menu("2", opening_status={**base, "observed_at": now - timedelta(minutes=20), "valid_until": now - timedelta(minutes=10)}),
+            menu("3", opening_status={**base, "observed_at": now + timedelta(minutes=1)}),
+        ]
+        result = self.call_recommend(records=records, c=constraints(open_now=True)).get_json()
+        self.assertEqual(result["recommendations"], [])
+        self.assertEqual(result["diagnostics"]["rejected"]["현재 영업하지 않음"], 1)
+        self.assertEqual(result["diagnostics"]["rejected"]["현재 영업 여부 미확인"], 2)
+
+    def test_newer_closed_and_conflicting_opening_records_fail_closed(self):
+        now = datetime.now(timezone.utc)
+        opened = dict(is_open=True, provider="official", observed_at=now - timedelta(minutes=2),
+                      valid_until=now + timedelta(minutes=10), evidence=evidence())
+        closed = {**opened, "is_open": False, "observed_at": now - timedelta(minutes=1)}
+        for second in (closed, {**closed, "observed_at": opened["observed_at"]}):
+            result = self.call_recommend(records=[menu("1", opening_status=opened),
+                menu("1", menu_name="다른 메뉴", opening_status=second)], c=constraints(open_now=True)).get_json()
+            self.assertEqual(result["recommendations"], [])
+
+    def test_import_preserves_diet_and_opening_evidence(self):
+        import csv
+        now = datetime.now(timezone.utc)
+        record = menu(dietary_checks=[dict(term="vegan", evidence=evidence())], opening_status=dict(
+            is_open=True, provider="official", observed_at=now,
+            valid_until=now + timedelta(minutes=10), evidence=evidence())).model_dump(mode="json")
+        csv_path = Path(self.temp.name) / "verified.csv"
+        with csv_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=list(record))
+            writer.writeheader()
+            writer.writerow({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v for k, v in record.items()})
+        import_csv(csv_path, self.path)
+        stored = db.get_menus(self.path, ["1"])[0]
+        self.assertEqual(stored["dietary_checks"][0]["term"], "vegan")
+        self.assertEqual(stored["opening_status"]["observed_at"], record["opening_status"]["observed_at"])
+
+    def test_opening_rechecked_after_slow_weather_lookup(self):
+        now = datetime.now(timezone.utc)
+        opening = dict(is_open=True, provider="official", observed_at=now,
+                       valid_until=now + timedelta(minutes=1), evidence=evidence())
+        with patch.object(rec, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = now
+            def slow_weather(origin):
+                clock.now.return_value = now + timedelta(minutes=2)
+                return {"scores": {}, "available": False}
+            self.weather_ranking.side_effect = slow_weather
+            result = self.call_recommend(records=[menu(opening_status=opening)], c=constraints(open_now=True)).get_json()
+        self.assertEqual(result["recommendations"], [])
+        self.assertIn("현재 영업 여부 미확인", result["diagnostics"]["rejected"])
+
+    def test_rank_policy_lexicographic_and_missing_weather(self):
+        def candidate(id, *, soft=0, complete=.5, age=1, distance=500, category="한식", price=10000):
+            return {**place(id), "category_name": "음식점 > " + category, "distance": distance, "route": None,
+                    "menu": {"name": "test", "price_krw": price},
+                    "score_breakdown": {"soft_matches": soft, "evidence_completeness": complete, "evidence_age_days": age}}
+        weather = {"scores": {"한식": .1, "중식": .9}}
+        pairs = [
+            (candidate("1", soft=1, complete=.1, distance=900), candidate("2", complete=1)),
+            (candidate("1", complete=.8, age=50), candidate("2", complete=.5, age=0)),
+            (candidate("1", age=0, distance=900), candidate("2", age=10, distance=100)),
+            (candidate("1", distance=100), candidate("2", distance=200, category="중식")),
+            (candidate("1", category="중식"), candidate("2", category="한식")),
+        ]
+        for first, second in pairs:
+            self.assertEqual(rec.rank_candidates([second, first], weather)[0]["id"], "1")
+        ranked = rec.rank_candidates([candidate("2", category="중식"), candidate("1", category="미분류")], weather)
+        self.assertEqual(ranked[0]["id"], "1")
+        self.assertTrue(all(not p["score_breakdown"]["weather_applied"] for p in ranked))
+        self.assertIsNone(ranked[0]["score_breakdown"]["weather_score"])
+        invalid = rec.rank_candidates([candidate("1")], {"scores": {"한식": float("nan")}})
+        self.assertIsNone(invalid[0]["score_breakdown"]["weather_score"])
+
+    def test_quality_counts_groups_not_repeated_claims(self):
+        now = datetime.now(timezone.utc)
+        original = menu()
+        more = menu(tags=original.tags * 4)
+        self.assertEqual(rec.evidence_quality(original, [], now), rec.evidence_quality(more, [], now))
+        source = evidence()
+        source["observed_on"] = (date.today() - timedelta(days=30)).isoformat()
+        self.assertEqual(rec.evidence_quality(original, [{"source": source}], now)["evidence_age_days"], 30)
+
+    def test_weather_provider_uses_resolved_origin_not_client_scores(self):
+        self.call_recommend(c=constraints(walking_minutes_max=None))
+        self.weather_ranking.assert_called_once_with({"lat": 37.5, "lon": 127.0, "name": "선택한 위치"})
+        response = self.client.post("/api/recommend", json={"query": "추천", "weather_score": 999})
+        self.assertEqual(response.status_code, 400)
+
+    def test_weather_ranking_requires_observation_and_model(self):
+        origin = {"lat": 37.5, "lon": 127.0}
+        with patch("app.load_weather_model", return_value=None), patch("app.weather_context") as lookup:
+            self.assertFalse(weather_ranking(origin)["available"])
+            lookup.assert_not_called()
+        with patch("app.load_weather_model", return_value=object()), patch("app.weather_context") as lookup:
+            lookup.return_value = {"weather": {"error": "확인 불가"}, "recommendations": []}
+            self.assertEqual(weather_ranking(origin)["scores"], {})
+            lookup.return_value = {"weather": {"observed_at": "test-observation"},
+                                   "recommendations": [{"name": "한식", "weather_score": .13}]}
+            result = weather_ranking(origin)
+            self.assertEqual(result["scores"], {"한식": .13})
+            self.assertEqual(result["observed_at"], "test-observation")
+            self.assertNotIn("serviceKey", result["source"]["url"])
+            lookup.assert_called_with(37.5, 127.0)
+
+    def test_dataset_has_40_distinct_cases_and_separate_holdout(self):
+        self.assertEqual(len(CASES), 40)
+        self.assertEqual(len({case[1] for case in CASES}), 40)
+        self.assertEqual(sum(name.startswith("holdout_") for name, _, _ in CASES), 20)
 
     def test_partial_does_not_pad_or_duplicate_restaurant(self):
         records = [menu("1"), menu("1", menu_name="두 번째 메뉴", price_krw=11000),
@@ -334,6 +486,21 @@ class MealFlowTest(TestCase):
         self.assertIn("error", response.get_json()["weather"])
         self.assertFalse(predict.called)
         self.assertEqual(convert_grid(37.5665, 126.9780), (60, 127))
+
+    def test_weather_observation_time_matches_hourly_api_and_hint_limit(self):
+        values = {"T1H": "24", "REH": "50", "WSD": "1.5", "RN1": "강수없음", "PTY": "0"}
+        response = MagicMock()
+        response.json.return_value = {"response": {"body": {"items": {"item": [
+            {"category": key, "obsrValue": value} for key, value in values.items()]}}}}
+        with patch.dict(os.environ, {"WEATHER_API_KEY": "test-only"}), \
+             patch.object(rec, "kakao_get", return_value={}), \
+             patch("app.requests.get", return_value=response) as request, \
+             patch("app.weather_hints", return_value=[{"name": str(i), "weather_score": .1} for i in range(5)]):
+            result = self.client.post("/get-initial-data", json={"lat": 37.5, "lon": 127.0}).get_json()
+        observed = datetime.fromisoformat(result["weather"]["observed_at"])
+        self.assertEqual((observed.minute, observed.second, observed.microsecond), (0, 0, 0))
+        self.assertEqual(request.call_args.kwargs["params"]["base_time"], observed.strftime("%H00"))
+        self.assertEqual(len(result["recommendations"]), 3)
 
 
 if __name__ == "__main__":

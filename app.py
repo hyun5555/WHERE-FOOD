@@ -96,7 +96,7 @@ def health():
 @app.post("/api/recommend")
 def recommend_meal():
     payload = rec.RecommendInput.model_validate(request.get_json(silent=True))
-    result = rec.recommend(payload, database_path())
+    result = rec.recommend(payload, database_path(), weather_provider=weather_ranking)
     db.save_request(database_path(), session_id(), result)
     return jsonify(result)
 
@@ -156,7 +156,7 @@ def weather_hints(weather, region, now):
         foods = ["치킨", "한식", "분식", "카페/디저트", "족발/보쌈", "패스트푸드", "돈까스/일식", "피자", "찜탕", "중식", "아시안/양식", "회", "도시락"]
         scores = model.predict(pd.DataFrame([{**base, "배달상점 업종명": f} for f in foods]))
         return [{"name": f, "weather_score": round(float(s), 3)} for f, s in
-                sorted(zip(foods, scores), key=lambda pair: pair[1], reverse=True)[:3] if math.isfinite(float(s))]
+                sorted(zip(foods, scores), key=lambda pair: pair[1], reverse=True) if math.isfinite(float(s))]
     except Exception:
         app.logger.info("Optional weather prediction unavailable")
         return []
@@ -170,16 +170,23 @@ def get_initial_data():
     payload = rec.RecommendInput.model_validate({**raw, "query": "날씨"})
     if payload.lat is None:
         return jsonify(error="위치를 확인해주세요."), 400
+    result = weather_context(payload.lat, payload.lon)
+    result["recommendations"] = result["recommendations"][:3]
+    return jsonify(result)
+
+
+def weather_context(lat, lon):
+    """Shared server-side observations for hints and ranking at the resolved origin."""
     # The KMA grid only covers Korea; avoid projecting poles or unsupported locations.
-    if not 33 <= payload.lat <= 39 or not 124 <= payload.lon <= 132:
-        return jsonify(weather={"error": "날씨는 한국 내 위치에서 지원합니다."},
-                       recommendations=[], location={"name": "선택한 위치"})
+    if not 33 <= lat <= 39 or not 124 <= lon <= 132:
+        return dict(weather={"error": "날씨는 한국 내 위치에서 지원합니다."},
+                    recommendations=[], location={"name": "선택한 위치"})
     now = datetime.now(ZoneInfo("Asia/Seoul"))
-    observation = now - timedelta(hours=int(now.minute < 40))
-    x, y = convert_grid(payload.lat, payload.lon)
+    observation = (now - timedelta(hours=int(now.minute < 40))).replace(minute=0, second=0, microsecond=0)
+    x, y = convert_grid(lat, lon)
     region = {}
     try:
-        docs = rec.kakao_get("/v2/local/geo/coord2address.json", {"x": payload.lon, "y": payload.lat}).get("documents", [])
+        docs = rec.kakao_get("/v2/local/geo/coord2address.json", {"x": lon, "y": lat}).get("documents", [])
         region = (docs[0].get("address") or {}) if docs else {}
     except rec.RecommendationError:
         pass
@@ -204,7 +211,20 @@ def get_initial_data():
         result.update(weather=weather, recommendations=weather_hints(weather, region, now))
     except (requests.RequestException, ValueError, KeyError, TypeError):
         result["weather"] = {"error": "날씨를 확인하지 못했습니다. 식사 조건 검색은 계속 이용할 수 있습니다."}
-    return jsonify(result)
+    return result
+
+
+def weather_ranking(origin):
+    if load_weather_model() is None:
+        return {"scores": {}, "available": False, "reason": "날씨 참고 모델 미설치 또는 로딩 실패"}
+    context = weather_context(origin["lat"], origin["lon"])
+    weather = context["weather"]
+    if "error" in weather:
+        return {"scores": {}, "available": False, "reason": weather["error"]}
+    scores = {row["name"]: row["weather_score"] for row in context["recommendations"]}
+    return {"scores": scores, "available": bool(scores), "observed_at": weather["observed_at"],
+            "model": "weather_food_regression_model3.pkl", "kind": "legacy_reference_score_not_probability",
+            "source": {"title": "기상청 초단기 관측 API", "url": "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst"}}
 
 
 if __name__ == "__main__":

@@ -47,14 +47,16 @@ const descendants = e => [e, ...e.children.flatMap(descendants)];
 const source = {title: 'TEST ONLY', url: 'https://example.com/menu', observed_on: '2026-09-07', excerpt: '검증 예시'};
 const result = {
     request_id: randomUUID(), status: 'partial', message: '테스트 결과',
-    constraints: {budget_krw: 15000, hard_fields: []},
+    constraints: {budget_krw: 15000, dietary_requirements: ['vegan'], open_now: true, hard_fields: []},
     location_options: [], origin: {name: '강남역'}, notice: '테스트',
     recommendations: [{
         id: '1', place_name: '<img src=x onerror=alert(1)>', rank: 1,
         address_name: '테스트 주소', distance: 300,
         menu: {name: '국밥', price_krw: 10000, source},
         route: null, matches: [{text: '예산 이내', source}], unknown: ['조용한지 미확인'],
-        place_source: source, place_url: 'javascript:alert(1)'
+        place_source: source, place_url: 'javascript:alert(1)',
+        opening_status: null,
+        score_breakdown: {soft_matches: 1, evidence_completeness: 0.5, evidence_age_days: 10, weather_score: null, weather_applied: false}
     }]
 };
 
@@ -70,6 +72,10 @@ const result = {
     assert.equal(get('search-results-list').children.length, 1);
     assert.equal(requests.filter(r => r.json.event_type === 'recommendations_viewed').length, 1);
     const nodes = descendants(get('search-results-list'));
+    assert(nodes.some(n => n.textContent === '현재 영업 여부 미확인'));
+    assert(nodes.some(n => n.textContent === '날씨 참고 점수 미확인 · 정렬 미적용'));
+    assert(descendants(get('parsed-constraints')).some(n => n.textContent === '필수 식단: 비건'));
+    assert(descendants(get('parsed-constraints')).some(n => n.textContent === '현재 영업 필수: 예'));
     assert(nodes.some(n => n.tagName === 'h3' && n.textContent.includes('<img')), 'provider HTML must remain text');
     assert(!nodes.some(n => n.tagName === 'img'));
     assert(!nodes.find(n => n.textContent === '상세보기').href, 'unsafe URL must be removed');
@@ -102,5 +108,13 @@ const result = {
     await failed;
     assert.equal(get('recommendation-status').textContent, 'API 키 미설정');
     assert.equal(get('recommend-submit').disabled, false);
+    const grounded = structuredClone(result);
+    grounded.weather_context = {source: {title: '날씨 테스트 출처', url: 'https://example.com/weather'}, observed_at: '2026-09-07T13:00:00+09:00'};
+    grounded.recommendations[0].score_breakdown.weather_score = 0.13;
+    grounded.recommendations[0].score_breakdown.weather_applied = true;
+    context.groundedResult = grounded;
+    run('renderDecisionResults(groundedResult)');
+    assert(descendants(get('search-results-list')).some(n => n.href === 'https://example.com/weather'));
+    assert(descendants(get('search-results-list')).some(n => n.textContent.includes('선택 확률 아님')));
     console.log('PASS: render, no-location request, feedback, XSS, stale response, edit reset, error recovery');
 })().catch(error => { console.error(error); process.exitCode = 1; });

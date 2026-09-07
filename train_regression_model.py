@@ -1,3 +1,5 @@
+import argparse
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import GridSearchCV
@@ -131,12 +133,18 @@ def train_regression_model(df, preprocessor, features):
 
 # --- 3. 실행부 ---
 if __name__ == "__main__":
-    # 파일 경로를 실제 파일 경로로 수정해주세요.
-    filepath = r"d:\sj\python\test2\test\배달_음식추천용_최종데이터_가공05.csv" 
+    root = Path(__file__).resolve().parent
+    cli = argparse.ArgumentParser(description="기존 날씨 참고 점수 모델 학습")
+    cli.add_argument("--data", type=Path, default=root / "배달_음식추천용_최종데이터_가공05.csv")
+    cli.add_argument("--output", type=Path, default=root / "model/weather_food_regression_model3.pkl")
+    args = cli.parse_args()
+    if not args.data.is_file():
+        cli.error(f"학습 CSV를 찾을 수 없습니다: {args.data}")
+    filepath = args.data
 
     df_full, preprocessor, all_features = load_and_prepare_data_for_regression(filepath)
     
-    # 메모리 관리를 위해 30% 샘플링 (컴퓨터 사양에 따라 조절)
+    # 메모리 관리를 위해 10% 샘플링 (기존 학습 방식 유지)
     df_sampled = df_full.sample(frac=0.1, random_state=42)
     print(f"\n▶ 메모리 관리를 위해 전체 데이터의 {len(df_sampled)}개만 샘플링하여 사용합니다.")
 
@@ -144,5 +152,6 @@ if __name__ == "__main__":
     
     # ★★★ 이제 LabelEncoder(le)는 필요 없으므로, 모델과 전처리기만 저장 ★★★
     # (주의: 모델 객체에 전처리 파이프라인이 포함되어 있으므로, 모델만 저장하면 됨)
-    joblib.dump(model, "./model/weather_food_regression_mode3l.pkl")
-    print("\n✅ 회귀 모델이 './model/weather_food_regression_model3.pkl'에 저장되었습니다.")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, args.output)
+    print(f"\n✅ 회귀 모델이 '{args.output}'에 저장되었습니다.")

@@ -25,7 +25,7 @@ def import_csv(csv_path, database_path):
             try:
                 record = {key: value for key, value in row.items() if value}
                 record["price_krw"] = int(row["price_krw"]) if row["price_krw"] else None
-                for key in ("menu_evidence", "tags", "absent_ingredients", "allergy_checks", "atmosphere"):
+                for key in ("menu_evidence", "tags", "absent_ingredients", "allergy_checks", "atmosphere", "dietary_checks", "opening_status"):
                     if record.get(key):
                         record[key] = json.loads(record[key])
                 menus.append(MenuRecord.model_validate(record))

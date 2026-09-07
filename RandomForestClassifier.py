@@ -1,3 +1,5 @@
+import argparse
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import time
@@ -134,7 +136,14 @@ def train_model(df, preprocessor, features): # features 인자 추가
 
 # --- 3. 실행부 (수정) ---
 if __name__ == "__main__":
-    filepath = r"d:\sj\python\test2\test\배달_음식추천용_최종데이터_가공05.csv"
+    root = Path(__file__).resolve().parent
+    cli = argparse.ArgumentParser(description="기존 날씨 음식 분류 모델 학습")
+    cli.add_argument("--data", type=Path, default=root / "배달_음식추천용_최종데이터_가공05.csv")
+    cli.add_argument("--output", type=Path, default=root / "model/weather_food_final_model2.pkl")
+    args = cli.parse_args()
+    if not args.data.is_file():
+        cli.error(f"학습 CSV를 찾을 수 없습니다: {args.data}")
+    filepath = args.data
 
     # 1. 데이터 로드 및 피처 생성
     df_full, preprocessor, le, all_features = load_and_create_stat_features(filepath)
@@ -151,6 +160,7 @@ if __name__ == "__main__":
     final_classifier = model.named_steps['clf']
     final_preprocessor = model.named_steps['pre']
     
-    joblib.dump((final_classifier, final_preprocessor, le), "./model/weather_food_final_model2.pkl")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump((final_classifier, final_preprocessor, le), args.output)
     
-    print("\n✅ (분류기+통계피처, 전처리기, 인코더)가 './model/weather_food_final_model2.pkl'에 저장되었습니다.")
+    print(f"\n✅ (분류기+통계피처, 전처리기, 인코더)가 '{args.output}'에 저장되었습니다.")

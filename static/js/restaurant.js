@@ -24,7 +24,8 @@ const constraintLabels = {
     location_text: '장소', walking_minutes_max: '도보 상한(분)',
     max_distance_m: '직선거리 상한(m)', budget_krw: '1인 예산(원)',
     excluded_ingredients: '제외 재료', allergens: '알레르기',
-    excluded_foods: '제외 음식·맛', dish_tags: '음식 선호', atmosphere_tags: '분위기 선호'
+    excluded_foods: '제외 음식·맛', dish_tags: '음식 선호', atmosphere_tags: '분위기 선호',
+    dietary_requirements: '필수 식단', open_now: '현재 영업 필수'
 };
 
 function renderDecisionResults(result) {
@@ -32,9 +33,12 @@ function renderDecisionResults(result) {
     const constraints = document.getElementById('parsed-constraints');
     Object.entries(constraintLabels).forEach(([key, label]) => {
         const value = result.constraints[key];
-        if (value === null || value === undefined || (Array.isArray(value) && !value.length)) return;
+        if (value === null || value === undefined || value === false || (Array.isArray(value) && !value.length)) return;
         const required = result.constraints.hard_fields?.includes(key) ? ' · 필수' : '';
-        constraints.appendChild(node('span', label + required + ': ' + (Array.isArray(value) ? value.join(', ') : value), 'constraint-chip'));
+        const diets = {vegan: '비건', vegetarian: '락토오보 채식(달걀·유제품 허용)', pescatarian: '페스코'};
+        const shown = key === 'dietary_requirements' ? value.map(diet => diets[diet] || diet).join(', ')
+            : key === 'open_now' ? '예' : Array.isArray(value) ? value.join(', ') : value;
+        constraints.appendChild(node('span', label + required + ': ' + shown, 'constraint-chip'));
     });
     result.location_options.forEach(option => {
         const button = node('button', option.name + ' · ' + option.address, 'choice-button');
@@ -54,7 +58,7 @@ function renderDecisionResults(result) {
     document.getElementById('map-and-list-section').hidden = false;
     document.getElementById('map-title').textContent = result.origin.name + ' 주변 추천';
     document.getElementById('decision-notice').textContent = result.notice || '';
-    displayPlacesOnList(result.recommendations);
+    displayPlacesOnList(result.recommendations, result.weather_context);
     if (map && result.origin) {
         moveMainMarker(new kakao.maps.LatLng(result.origin.lat, result.origin.lon));
         map.relayout();
@@ -70,7 +74,7 @@ function sourceNode(source) {
     return row;
 }
 
-function displayPlacesOnList(places) {
+function displayPlacesOnList(places, weatherContext) {
     const list = document.getElementById('search-results-list');
     list.replaceChildren();
     const requestId = currentRequestId;
@@ -97,6 +101,22 @@ function displayPlacesOnList(places) {
         });
         card.appendChild(matches);
         place.unknown.forEach(text => card.appendChild(node('p', text, 'text-muted')));
+        const opening = place.opening_status;
+        card.appendChild(node('p', opening
+            ? (opening.is_open ? '영업 중 확인' : '영업하지 않음 확인') + ' · 확인 ' + opening.observed_at + ' · 유효 ' + opening.valid_until
+            : '현재 영업 여부 미확인', 'text-muted'));
+        if (opening) card.appendChild(sourceNode(opening.evidence));
+        const score = place.score_breakdown;
+        if (score) {
+            card.appendChild(node('p', '선호 일치 ' + score.soft_matches + '개 · 근거 항목 ' +
+                Math.round(score.evidence_completeness * 100) + '% · 사용 근거 최대 경과 ' + score.evidence_age_days + '일', 'text-muted'));
+            card.appendChild(node('p', score.weather_score == null ? '날씨 참고 점수 미확인 · 정렬 미적용'
+                : '날씨 참고 점수 ' + score.weather_score + ' (선택 확률 아님) · ' + (score.weather_applied ? '동점 결정 적용' : '동점 결정 미적용'), 'text-muted'));
+            if (score.weather_score != null && weatherContext?.source) {
+                card.appendChild(sourceNode({...weatherContext.source, observed_at: weatherContext.observed_at}));
+                card.appendChild(node('small', '날씨 관측 시각: ' + weatherContext.observed_at));
+            }
+        }
         const actions = node('div', '', 'decision-actions');
         const feedback = node('p', '', 'feedback-status');
         feedback.setAttribute('role', 'status');
