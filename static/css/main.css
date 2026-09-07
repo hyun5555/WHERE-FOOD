@@ -717,3 +717,16 @@ footer {
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+
+#condition-review { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+#condition-review h3 { font-size: 20px; }
+.constraint-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.constraint-editor-grid > label { display: grid; gap: 6px; font-size: 13px; }
+.constraint-editor-grid input:not([type="checkbox"]) { width: 100%; padding: 10px; border: 1px solid #c7d1df; border-radius: 8px; }
+.constraint-editor-grid fieldset { grid-column: 1 / -1; }
+#condition-review legend { font-size: 15px; font-weight: 700; }
+#unknown-conditions { margin: 16px 0; padding: 12px; border: 1px solid #c7d1df; }
+#condition-review .review-check { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; font-size: 14px; }
+.review-check input { margin-top: 4px; flex: 0 0 auto; }
+#confirm-search { padding: 12px 18px; }
+@media (max-width: 640px) { .constraint-editor-grid { grid-template-columns: 1fr; } }

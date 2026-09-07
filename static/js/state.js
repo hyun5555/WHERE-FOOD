@@ -8,3 +8,4 @@ let recommendationController = null;
 let recommendationVersion = 0;
 let locationVersion = 0;
 let selectedOriginPlaceId = null;
+let constraintDraft = null; // Signed, session-bound draft; never persisted in localStorage.

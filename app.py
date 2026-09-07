@@ -11,11 +11,13 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, session
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import ValidationError
 import requests
 
 import db
 import recommendation as rec
+from workflow import run_recommendation
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -93,10 +95,42 @@ def health():
     )
 
 
+def draft_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt="meal-constraints-v1")
+
+
+@app.post("/api/constraints")
+def extract_constraints():
+    payload = rec.RecommendInput.model_validate(request.get_json(silent=True))
+    parsed = rec.parse_constraints(payload.query)
+    values = parsed.model_dump(mode="json", exclude={"source_spans", "unknown_terms"})
+    # Do not persist the query or draft. The signed token is not encryption: browser memory only.
+    token = draft_serializer().dumps({"session": session_id(), "constraints": values,
+                                      "unknown_terms": parsed.unknown_terms})
+    return jsonify(draft_token=token, expires_in=1800, constraints=values, unknown_terms=parsed.unknown_terms,
+                   status="review_required", parser={"provider": "ollama", "model": rec.OLLAMA_MODEL, "version": rec.PARSER_VERSION})
+
+
 @app.post("/api/recommend")
 def recommend_meal():
-    payload = rec.RecommendInput.model_validate(request.get_json(silent=True))
-    result = rec.recommend(payload, database_path(), weather_provider=weather_ranking)
+    payload = rec.ConfirmedRecommendInput.model_validate(request.get_json(silent=True), strict=True)
+    try:
+        draft = draft_serializer().loads(payload.draft_token, max_age=1800)
+        if draft["session"] != session_id():
+            raise BadSignature("different session")
+    except SignatureExpired:
+        return jsonify(error="조건 초안이 만료되었습니다. 다시 해석해주세요.", code="draft_expired"), 409
+    except BadSignature:
+        return jsonify(error="현재 세션의 조건 초안을 확인할 수 없습니다. 다시 해석해주세요.", code="invalid_draft"), 400
+    if not set(payload.ignored_unknown_terms).issubset(draft["unknown_terms"]):
+        return jsonify(error="제외할 미지원 조건을 확인해주세요.", code="invalid_input"), 400
+    values = payload.constraints.model_dump(mode="json")
+    c = rec.MealConstraints(**values, source_spans=[],
+                           unknown_terms=[v for v in draft["unknown_terms"] if v not in payload.ignored_unknown_terms])
+    result = run_recommendation(c, payload, database_path(), weather_ranking)
+    result["confirmation"] = {"source": "user_confirmed", "confirmed_at": db.utcnow(),
+                              "edited_fields": [k for k, v in values.items() if v != draft["constraints"].get(k)],
+                              "ignored_unknown_count": len(set(payload.ignored_unknown_terms))}
     db.save_request(database_path(), session_id(), result)
     return jsonify(result)
 

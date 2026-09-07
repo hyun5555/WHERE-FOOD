@@ -80,16 +80,27 @@ class MealFlowTest(TestCase):
         app.config.update(self.old_config)
         self.temp.cleanup()
 
+    def draft(self, c=None):
+        with patch.object(rec, "parse_constraints", return_value=c or constraints()):
+            response = self.client.post("/api/constraints", json={"query": "테스트 요청"})
+        self.assertEqual(response.status_code, 200)
+        return response.get_json()
+
+    def confirmed_payload(self, draft, **changes):
+        return {"draft_token": draft["draft_token"], "confirmed": True,
+                "constraints": draft["constraints"], "lat": 37.5, "lon": 127.0, **changes}
+
     def call_recommend(self, records=None, c=None, routes=None):
         records = records if records is not None else [menu(str(i)) for i in range(1, 5)]
         db.upsert_menus(self.path, records)
         places = list({m.place_id: place(m.place_id) for m in records}.values())
         routes = routes or (lambda origin, p: dict(seconds=600, distance_m=700,
                                                   source_url=p["place_url"], observed_at=db.utcnow()))
-        with patch.object(rec, "parse_constraints", return_value=c or constraints()), \
+        draft = self.draft(c)
+        with patch.object(rec, "parse_constraints", side_effect=AssertionError("search must not parse")), \
              patch.object(rec, "search_candidates", return_value=places), \
              patch.object(rec, "walking_route", side_effect=routes):
-            return self.client.post("/api/recommend", json={"query": "테스트 요청", "lat": 37.5, "lon": 127.0})
+            return self.client.post("/api/recommend", json=self.confirmed_payload(draft))
 
     def test_full_flow_top_three_and_feedback(self):
         response = self.call_recommend()
@@ -120,9 +131,9 @@ class MealFlowTest(TestCase):
             rec.SourceSpan(field="excluded_ingredients", text="땅콩 빼고")])
         self.mock_ollama(parsed.model_dump_json())
         db.upsert_menus(self.path, [menu("1")])
+        draft = self.client.post("/api/constraints", json={"query": "15000원 이하, 땅콩 빼고"}).get_json()
         with patch.object(rec, "search_candidates", return_value=[place("1")]):
-            response = self.client.post("/api/recommend", json={
-                "query": "15000원 이하, 땅콩 빼고", "lat": 37.5, "lon": 127.0})
+            response = self.client.post("/api/recommend", json=self.confirmed_payload(draft))
         self.assertEqual(response.status_code, 200)
         result = response.get_json()
         self.assertEqual(result["parser"]["model"], "qwen3.5:9b")
@@ -133,6 +144,113 @@ class MealFlowTest(TestCase):
     def test_unknown_exclusion_never_passes(self):
         failures, _, _ = rec.checks_for_menu(menu(absent_ingredients=[]), constraints())
         self.assertIn("땅콩 미사용 근거 없음", failures)
+
+    def test_extract_only_does_not_search_or_save_request(self):
+        with patch.object(rec, "search_candidates") as search, patch.object(rec, "kakao_get") as places:
+            draft = self.draft()
+        search.assert_not_called()
+        places.assert_not_called()
+        self.assertEqual(draft["status"], "review_required")
+        self.assertNotIn("source_spans", draft["constraints"])
+        with db.connect(self.path) as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM recommendation_requests").fetchone()[0], 0)
+
+    def test_confirmed_budget_edit_filters_and_records_provenance(self):
+        draft = self.draft(constraints(walking_minutes_max=None))
+        payload = self.confirmed_payload(draft)
+        payload["constraints"]["budget_krw"] = 10000
+        db.upsert_menus(self.path, [menu("1", price_krw=10000), menu("2", price_krw=10001)])
+        with patch.object(rec, "parse_constraints", side_effect=AssertionError("unexpected inference")), \
+             patch.object(rec, "search_candidates", return_value=[place("1"), place("2")]):
+            result = self.client.post("/api/recommend", json=payload).get_json()
+        self.assertEqual([p["id"] for p in result["recommendations"]], ["1"])
+        self.assertEqual(result["confirmation"]["edited_fields"], ["budget_krw"])
+        self.assertEqual(result["constraints"]["source_spans"], [])
+        with db.connect(self.path) as con:
+            snapshot = con.execute("SELECT snapshot_json FROM recommendation_requests").fetchone()[0]
+        self.assertNotIn(draft["draft_token"], snapshot)
+        self.assertNotIn('"source_spans"', snapshot)
+
+    def test_confirmation_rejects_invalid_and_forged_fields(self):
+        payload = self.confirmed_payload(self.draft())
+        invalid = [
+            {**payload, "confirmed": False}, {**payload, "confirmed": 1},
+            {**payload, "lat": True}, {**payload, "lon": None},
+            {**payload, "weather_score": 999}, {**payload, "ignored_unknown_terms": ["偽造"]},
+        ]
+        for field, value in [("budget_krw", "10000"), ("budget_krw", True), ("budget_krw", 1.5),
+                             ("budget_krw", 0), ("walking_minutes_max", 121), ("max_distance_m", 20001),
+                             ("location_text", " "), ("allergens", [""]), ("allergens", ["우유"] * 21),
+                             ("allergens", ["우유", "우유"]), ("allergens", ["x" * 51]),
+                             ("dietary_requirements", ["halal"]), ("source_spans", []),
+                             ("unknown_terms", []), ("menu_evidence", {})]:
+            invalid.append({**payload, "constraints": {**payload["constraints"], field: value}})
+        invalid.append({**payload, "constraints": {**payload["constraints"], "dish_tags": [], "hard_fields": ["dish_tags"]}})
+        with patch.object(rec, "search_candidates") as search, patch.object(rec, "parse_constraints") as parse:
+            for value in invalid:
+                with self.subTest(value=value):
+                    self.assertEqual(self.client.post("/api/recommend", json=value).status_code, 400)
+        search.assert_not_called()
+        parse.assert_not_called()
+
+    def test_draft_session_signature_and_expiration(self):
+        from itsdangerous import SignatureExpired
+        payload = self.confirmed_payload(self.draft())
+        self.assertEqual(app.test_client().post("/api/recommend", json=payload).get_json()["code"], "invalid_draft")
+        forged = {**payload, "draft_token": payload["draft_token"] + "tampered"}
+        self.assertEqual(self.client.post("/api/recommend", json=forged).get_json()["code"], "invalid_draft")
+        with patch("app.draft_serializer") as serializer:
+            serializer.return_value.loads.side_effect = SignatureExpired("expired")
+            response = self.client.post("/api/recommend", json=payload)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["code"], "draft_expired")
+        serializer.return_value.loads.assert_called_once_with(payload["draft_token"], max_age=1800)
+
+    def test_unknown_terms_require_explicit_exclusion(self):
+        draft = self.draft(constraints(unknown_terms=["내일 예약"], walking_minutes_max=None))
+        payload = self.confirmed_payload(draft)
+        db.upsert_menus(self.path, [menu()])
+        with patch.object(rec, "search_candidates", return_value=[place()]) as search:
+            result = self.client.post("/api/recommend", json=payload).get_json()
+            self.assertEqual(result["workflow"]["steps"], ["RESOLVE", "CLARIFY"])
+            search.assert_not_called()
+            payload["ignored_unknown_terms"] = ["내일 예약"]
+            result = self.client.post("/api/recommend", json=payload).get_json()
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["constraints"]["unknown_terms"], [])
+        self.assertEqual(result["confirmation"]["ignored_unknown_count"], 1)
+
+    def test_location_choice_reuses_draft_without_inference(self):
+        draft = self.draft(constraints(location_text="강남역", walking_minutes_max=None))
+        payload = self.confirmed_payload(draft)
+        with patch.object(rec, "parse_constraints", side_effect=AssertionError("unexpected inference")), \
+             patch.object(rec, "kakao_get", return_value={"documents": [place("1"), place("2")]}), \
+             patch.object(rec, "search_candidates", return_value=[]) as search:
+            first = self.client.post("/api/recommend", json=payload).get_json()
+            self.assertEqual(first["workflow"]["steps"], ["RESOLVE", "CLARIFY"])
+            search.assert_not_called()
+            payload["origin_place_id"] = "1"
+            second = self.client.post("/api/recommend", json=payload).get_json()
+            self.assertEqual(second["workflow"]["steps"], ["RESOLVE", "SEARCH_FILTER_RANK", "NO_RESULTS"])
+            search.assert_called_once()
+
+    def test_graph_branches_and_remote_tracing_disabled(self):
+        # No LangSmith export even when the process environment enables it.
+        import langsmith
+        from langsmith.run_helpers import get_tracing_context
+        original = rec.recommend
+        def search(*args, **kwargs):
+            self.assertIs(get_tracing_context()["enabled"], False)
+            return original(*args, **kwargs)
+        with patch.dict(os.environ, {"LANGSMITH_TRACING": "true", "LANGCHAIN_TRACING_V2": "true"}), \
+             patch.object(langsmith.Client, "create_run") as export, patch.object(rec, "recommend", side_effect=search):
+            result = self.call_recommend().get_json()
+        self.assertEqual(result["workflow"], {"engine": "langgraph", "version": "meal-v1",
+                                               "steps": ["RESOLVE", "SEARCH_FILTER_RANK", "RESPOND"]})
+        self.assertEqual(result["status"], "ok")
+        export.assert_not_called()
+        none = self.call_recommend(records=[menu(price_krw=99999)]).get_json()
+        self.assertEqual(none["workflow"]["steps"][-1], "NO_RESULTS")
 
     def test_budget_boundary_and_unknown_price(self):
         self.assertFalse(rec.checks_for_menu(menu(), constraints())[0])
@@ -347,9 +465,11 @@ class MealFlowTest(TestCase):
                       {"query": "x", "lat": True, "lon": 127.0},
                       {"query": "x", "lat": 91.0, "lon": 127.0},
                       {"query": "x", "lat": 37.5}]:
-            with self.subTest(value=value):
-                self.assertEqual(self.client.post("/api/recommend", json=value).status_code, 400)
-        self.assertEqual(self.client.post("/api/recommend", json={"query": "x"}, headers={"Origin": "https://evil.example"}).status_code, 403)
+            for endpoint in ("/api/constraints", "/api/recommend"):
+                with self.subTest(value=value, endpoint=endpoint):
+                    self.assertEqual(self.client.post(endpoint, json=value).status_code, 400)
+        for endpoint in ("/api/constraints", "/api/recommend"):
+            self.assertEqual(self.client.post(endpoint, json={"query": "x"}, headers={"Origin": "https://evil.example"}).status_code, 403)
 
     def test_local_parser_ignores_cloud_keys_hosts_and_proxies(self):
         parsed = constraints(location_text="강남역", walking_minutes_max=None, budget_krw=15000,
@@ -382,7 +502,7 @@ class MealFlowTest(TestCase):
             with self.subTest(code=code):
                 self.ollama.request.reset_mock()
                 self.ollama.request.side_effect = error
-                response = self.client.post("/api/recommend", json={"query": "강남역"})
+                response = self.client.post("/api/constraints", json={"query": "강남역"})
                 self.assertEqual(response.status_code, status)
                 self.assertEqual(response.get_json()["code"], code)
                 self.ollama.request.assert_called_once()
@@ -390,7 +510,7 @@ class MealFlowTest(TestCase):
         for status in (301, 404, 500):
             with self.subTest(status=status):
                 self.ollama.request.return_value.status_code = status
-                response = self.client.post("/api/recommend", json={"query": "강남역"})
+                response = self.client.post("/api/constraints", json={"query": "강남역"})
                 self.assertEqual(response.status_code, 503)
                 self.assertEqual(response.get_json()["code"], "ollama_model_missing" if status == 404 else "ollama_unavailable")
 
@@ -408,14 +528,14 @@ class MealFlowTest(TestCase):
     def test_busy_and_invalid_timeout_do_not_call_model(self):
         rec.PARSER_LOCK.acquire()
         try:
-            response = self.client.post("/api/recommend", json={"query": "강남역"})
+            response = self.client.post("/api/constraints", json={"query": "강남역"})
             self.assertEqual(response.status_code, 429)
             self.assertEqual(response.get_json()["code"], "parser_busy")
         finally:
             rec.PARSER_LOCK.release()
         for value in ("0", "301", "nan", ""):
             with patch.dict(os.environ, {"WHERE_FOOD_OLLAMA_TIMEOUT_SECONDS": value}):
-                response = self.client.post("/api/recommend", json={"query": "강남역"})
+                response = self.client.post("/api/constraints", json={"query": "강남역"})
                 self.assertEqual(response.get_json()["code"], "parser_not_configured")
         self.ollama.request.assert_not_called()
 

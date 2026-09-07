@@ -47,6 +47,7 @@ function searchLocation() {
     const keyword = document.getElementById('location-search-input').value.trim();
     if (!keyword) return;
     if (!ps) {
+        invalidateRecommendations({discardDraft: true});
         document.getElementById('meal-query').value = keyword + '에서 식당 추천해줘';
         document.getElementById('meal-query').focus();
         return;

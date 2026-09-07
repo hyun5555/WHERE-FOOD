@@ -34,7 +34,7 @@ class SourceSpan(BaseModel):
     text: str
 
 
-class MealConstraints(BaseModel):
+class ConstraintValues(BaseModel):
     model_config = ConfigDict(extra="forbid")
     location_text: str | None
     walking_minutes_max: int | None = Field(ge=1, le=120)
@@ -48,8 +48,48 @@ class MealConstraints(BaseModel):
     dish_tags: list[str]
     atmosphere_tags: list[str]
     hard_fields: list[HardField]
+
+
+class MealConstraints(ConstraintValues):
     unknown_terms: list[str]
     source_spans: list[SourceSpan]
+
+
+class ConfirmedConstraints(ConstraintValues):
+    """User-editable preferences only; no client-supplied facts or provenance."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    @model_validator(mode="after")
+    def bounded_values(self):
+        if self.location_text is not None and not 1 <= len(self.location_text.strip()) <= 200:
+            raise ValueError("장소는 1~200자여야 합니다.")
+        for name in ("excluded_ingredients", "allergens", "excluded_foods", "dish_tags",
+                     "atmosphere_tags", "dietary_requirements", "hard_fields"):
+            values = getattr(self, name)
+            if len(values) > 20 or len(set(values)) != len(values):
+                raise ValueError("각 조건은 중복 없이 최대 20개입니다.")
+            if any(not 1 <= len(v.strip()) <= 50 or v != v.strip() for v in values):
+                raise ValueError("조건 항목은 앞뒤 공백 없이 1~50자여야 합니다.")
+        if any(not getattr(self, name) for name in self.hard_fields):
+            raise ValueError("필수 선호에는 값을 입력해주세요.")
+        return self
+
+
+class ConfirmedRecommendInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    draft_token: str = Field(min_length=1, max_length=12000)
+    confirmed: bool = Field(strict=True)
+    constraints: ConfirmedConstraints
+    ignored_unknown_terms: list[str] = Field(default_factory=list, max_length=20)
+    lat: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
+    lon: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
+    origin_place_id: str | None = Field(default=None, pattern=r"^[0-9]{1,30}$")
+
+    @model_validator(mode="after")
+    def confirmation_and_location(self):
+        if self.confirmed is not True or (self.lat is None) != (self.lon is None):
+            raise ValueError("조건 확인과 위치 좌표를 확인해주세요.")
+        return self
 
 
 class RecommendInput(BaseModel):
@@ -476,20 +516,16 @@ def rank_candidates(candidates, weather):
     return list(unique.values())[:3]
 
 
-def recommend(payload, database_path, weather_provider=None):
-    c = parse_constraints(payload.query)
-    result = {"request_id": str(uuid4()), "schema_version": 2, "ranking_version": "rules-v2",
+def new_response(c):
+    return {"request_id": str(uuid4()), "schema_version": 3, "ranking_version": "rules-v2",
               "parser": {"provider": "ollama", "model": OLLAMA_MODEL, "version": PARSER_VERSION},
               "constraints": c.model_dump(mode="json"), "recommendations": [],
               "status": "no_results", "message": "", "diagnostics": {}, "location_options": []}
-    if c.unknown_terms:
-        result.update(status="clarification_required", message="다음 조건을 더 구체적으로 적어주세요: " + ", ".join(c.unknown_terms))
-        return result
-    origin, options = resolve_origin(c, payload)
-    if origin is None:
-        result.update(status="clarification_required", location_options=options,
-                      message="검색 기준 장소를 선택해주세요." if options else "위치를 허용하거나 문장에 구체적인 장소를 적어주세요.")
-        return result
+
+
+def recommend(c, origin, database_path, weather_provider=None):
+    """Search confirmed constraints only. Never call the parser from this function."""
+    result = new_response(c)
     result["origin"] = origin
     places = search_candidates(origin, c, db.catalog_names(database_path))
     by_id = {p["id"]: p for p in places}
@@ -586,12 +622,5 @@ def recommend(payload, database_path, weather_provider=None):
     result["diagnostics"] = {"places_searched": len(places), "menus_found": len(records),
                              "rejected": dict(rejected), "search_radius_m": c.max_distance_m or 2000,
                              "candidate_limit": 75}
-    count = len(result["recommendations"])
-    if count:
-        result.update(status="ok" if count == 3 else "partial",
-                      message=f"필수 조건을 확인한 식당 {count}곳입니다. 미확인 선호는 각 카드에 표시했습니다.")
-    else:
-        result["message"] = ("주변 식당의 검증된 메뉴 데이터가 아직 없습니다." if not records else
-                             "현재 검색 범위에서 필수 조건을 확인할 수 있는 식당이 없습니다.")
     result["notice"] = "검색 범위 내 확보한 데이터 기준입니다. 가격·성분·분위기는 변동될 수 있습니다. 알레르기는 방문 전 식당에 재확인하세요."
     return result

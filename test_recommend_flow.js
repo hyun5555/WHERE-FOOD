@@ -12,6 +12,7 @@ class Element {
         this.value = '';
         this.hidden = false;
         this.disabled = false;
+        this.checked = false;
         this.attributes = {};
         this.handlers = {};
     }
@@ -22,6 +23,11 @@ class Element {
     removeAttribute(name) { delete this.attributes[name]; delete this[name]; }
     focus() {}
     scrollIntoView() {}
+    reportValidity() { return true; } // Native validation is also checked in the real browser.
+    set id(value) { this._id = value; elements.set(value, this); }
+    get id() { return this._id; }
+    set value(value) { this._value = String(value); }
+    get value() { return this._value; }
 }
 const elements = new Map();
 const get = id => {
@@ -59,15 +65,40 @@ const result = {
         score_breakdown: {soft_matches: 1, evidence_completeness: 0.5, evidence_age_days: 10, weather_score: null, weather_applied: false}
     }]
 };
+const draft = {draft_token: 'signed-test-token', expires_in: 1800, unknown_terms: ['내일 예약'], constraints: {
+    location_text: '강남역', budget_krw: 15000, walking_minutes_max: null, max_distance_m: null,
+    excluded_ingredients: ['땅콩'], allergens: [], dietary_requirements: [], open_now: false,
+    excluded_foods: [], dish_tags: [], atmosphere_tags: ['조용한'], hard_fields: []
+}};
+const finish = async (promise, data, ok = true) => {
+    pending.shift()({ok, json: async () => data});
+    await promise;
+};
 
 (async () => {
     get('meal-query').value = '강남역에서 15000원 이하';
-    const first = run('submitRecommendation()');
-    assert.equal(requests[0].json.lat, null, 'textual location works without geolocation');
+    const extraction = run('parseRecommendation()');
+    assert.equal(requests[0].url, '/api/constraints');
     assert.equal(get('recommend-submit').disabled, true);
-    pending.shift()({ok: true, json: async () => result});
-    await first;
+    await finish(extraction, draft);
     assert.equal(get('recommend-submit').disabled, false);
+    assert.equal(get('condition-review').hidden, false);
+    assert.equal(get('edit-budget_krw').value, '15000');
+    assert.equal(get('confirm-conditions').checked, false);
+    assert.equal(requests.length, 1, 'extraction must not search or record impressions');
+    await run('submitRecommendation()');
+    assert.equal(requests.length, 1, 'unchecked confirmation cannot search');
+    get('edit-budget_krw').value = '12000';
+    get('confirm-conditions').checked = true;
+    get('ignore-unknown-0').checked = true;
+    const first = run('submitRecommendation()');
+    assert.equal(requests.at(-1).url, '/api/recommend');
+    assert.equal(requests.at(-1).json.lat, null, 'textual location works without geolocation');
+    assert.equal(requests.at(-1).json.constraints.budget_krw, 12000);
+    assert.equal(requests.at(-1).json.draft_token, draft.draft_token);
+    assert.deepEqual(requests.at(-1).json.ignored_unknown_terms, ['내일 예약']);
+    assert(!('query' in requests.at(-1).json));
+    await finish(first, result);
     assert.equal(get('map-and-list-section').hidden, false);
     assert.equal(get('search-results-list').children.length, 1);
     assert.equal(requests.filter(r => r.json.event_type === 'recommendations_viewed').length, 1);
@@ -85,10 +116,20 @@ const result = {
     assert.equal(requests.at(-1).json.request_id, result.request_id);
     assert.equal(requests.at(-1).json.place_id, '1');
 
-    // Older network response cannot overwrite a newly submitted query.
-    get('meal-query').value = '이전 요청';
+    // A location clarification reuses the reviewed draft, never the parser.
+    const clarification = run('submitRecommendation()');
+    await finish(clarification, {...result, recommendations: [], location_options: [{id: '2', name: '역', address: '주소'}]});
+    const chooseLocation = get('location-options').children[0].handlers.click();
+    assert.equal(requests.at(-1).json.origin_place_id, '2');
+    await finish(chooseLocation, result);
+    assert.equal(requests.filter(r => r.url === '/api/constraints').length, 1);
+
+    // Edited conditions invalidate old results and require renewed consent.
     const slow = run('submitRecommendation()');
-    get('meal-query').value = '새 요청';
+    get('constraint-editor-form').handlers.input({target: get('edit-budget_krw')});
+    assert.equal(get('confirm-conditions').checked, false);
+    assert.equal(get('map-and-list-section').hidden, true);
+    get('confirm-conditions').checked = true;
     const fast = run('submitRecommendation()');
     const resolveSlow = pending.shift(), resolveFast = pending.shift();
     resolveFast({ok: true, json: async () => ({...result, request_id: 'new', message: '새 결과'})});
@@ -98,14 +139,31 @@ const result = {
     assert.equal(get('recommendation-status').textContent, '새 결과');
     assert.equal(run('currentRequestId'), 'new');
 
-    // Editing the query removes old recommendation actions and aborts pending work.
+    // Query edits discard the draft; a late failure cannot overwrite the new state.
+    const staleError = run('submitRecommendation()');
     get('meal-query').handlers.input();
     assert.equal(get('map-and-list-section').hidden, true);
     assert.equal(run('currentRequestId'), null);
+    assert.equal(run('constraintDraft'), null);
+    await finish(staleError, {error: '오래된 오류'}, false);
+    assert.equal(get('recommendation-status').textContent, '');
 
-    const failed = run('submitRecommendation()');
-    pending.shift()({ok: false, json: async () => ({error: 'API 키 미설정'})});
-    await failed;
+    // Stale parser responses cannot restore an abandoned draft.
+    const slowParse = run('parseRecommendation()');
+    const fastParse = run('parseRecommendation()');
+    const oldParse = pending.shift(), newParse = pending.shift();
+    newParse({ok: true, json: async () => ({...draft, draft_token: 'new-draft'})});
+    await fastParse;
+    oldParse({ok: true, json: async () => draft});
+    await slowParse;
+    assert.equal(run('constraintDraft.draft_token'), 'new-draft');
+    get('confirm-conditions').checked = true;
+    await finish(run('submitRecommendation()'), {error: '초안 만료', code: 'draft_expired'}, false);
+    assert.equal(get('recommendation-status').textContent, '초안 만료');
+    assert.equal(run('constraintDraft'), null);
+    assert.equal(get('condition-review').hidden, true);
+
+    await finish(run('parseRecommendation()'), {error: 'API 키 미설정'}, false);
     assert.equal(get('recommendation-status').textContent, 'API 키 미설정');
     assert.equal(get('recommend-submit').disabled, false);
     const grounded = structuredClone(result);
@@ -116,5 +174,5 @@ const result = {
     run('renderDecisionResults(groundedResult)');
     assert(descendants(get('search-results-list')).some(n => n.href === 'https://example.com/weather'));
     assert(descendants(get('search-results-list')).some(n => n.textContent.includes('선택 확률 아님')));
-    console.log('PASS: render, no-location request, feedback, XSS, stale response, edit reset, error recovery');
+    console.log('PASS: parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, XSS');
 })().catch(error => { console.error(error); process.exitCode = 1; });
