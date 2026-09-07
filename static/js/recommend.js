@@ -26,7 +26,7 @@ async function submitRecommendation(originPlaceId = null) {
     const submit = document.getElementById('recommend-submit');
     submit.disabled = true;
     document.getElementById('recommendation-form').setAttribute('aria-busy', 'true');
-    status.textContent = '조건과 실제 메뉴 근거를 확인하고 있어요…';
+    status.textContent = '로컬 Qwen3.5가 조건을 해석하고 있어요. 첫 실행은 모델 로딩으로 시간이 더 걸릴 수 있어요…';
     try {
         const response = await fetch('/api/recommend', {
             method: 'POST',

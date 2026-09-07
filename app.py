@@ -87,7 +87,7 @@ def index():
 @app.get("/api/health")
 def health():
     return jsonify(
-        parser_configured=rec.parser_configured(),
+        parser=rec.parser_health(),
         places_configured=bool(os.environ.get("KAKAO_REST_API_KEY")),
         menu_count=db.menu_count(database_path()),
     )

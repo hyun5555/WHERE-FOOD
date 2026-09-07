@@ -6,10 +6,11 @@ from copy import deepcopy
 from datetime import date, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 from unittest import TestCase, main
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
+from contextlib import redirect_stdout
+from io import StringIO
 import json
 import os
 
@@ -17,6 +18,7 @@ from app import app, convert_grid
 import db
 import recommendation as rec
 from scripts.import_menu_data import import_csv
+from scripts.evaluate_parser import evaluate, EMPTY
 
 
 def constraints(**changes):
@@ -56,6 +58,20 @@ class MealFlowTest(TestCase):
         app.config.update(TESTING=True, DATABASE_PATH=self.path, SECRET_KEY="test-only")
         self.client = app.test_client()
         db.init_db(self.path)
+        # Tests must never contact a real model, even when API keys or Ollama exist.
+        session_patch = patch.object(rec.requests, "Session")
+        self.ollama = session_patch.start().return_value.__enter__.return_value
+        self.addCleanup(session_patch.stop)
+        env_patch = patch.dict(os.environ, {"WHERE_FOOD_OLLAMA_TIMEOUT_SECONDS": "120"})
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
+
+    def mock_ollama(self, content=None, **changes):
+        data = dict(done=True, done_reason="stop", message={"content": content or "{}"})
+        data.update(changes)
+        self.ollama.request.return_value = MagicMock(status_code=200)
+        self.ollama.request.return_value.json.return_value = data
+        return data
 
     def tearDown(self):
         app.config.update(self.old_config)
@@ -94,6 +110,22 @@ class MealFlowTest(TestCase):
             snapshot = json.loads(con.execute("SELECT snapshot_json FROM recommendation_requests").fetchone()[0])
         self.assertNotIn("origin", snapshot)
         self.assertNotIn("x", snapshot["recommendations"][0])
+
+    def test_local_json_reaches_existing_filter_and_feedback(self):
+        parsed = constraints(walking_minutes_max=None, dish_tags=[], atmosphere_tags=[], source_spans=[
+            rec.SourceSpan(field="budget_krw", text="15000원 이하"),
+            rec.SourceSpan(field="excluded_ingredients", text="땅콩 빼고")])
+        self.mock_ollama(parsed.model_dump_json())
+        db.upsert_menus(self.path, [menu("1")])
+        with patch.object(rec, "search_candidates", return_value=[place("1")]):
+            response = self.client.post("/api/recommend", json={
+                "query": "15000원 이하, 땅콩 빼고", "lat": 37.5, "lon": 127.0})
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertEqual(result["parser"]["model"], "qwen3.5:9b")
+        self.assertEqual(result["recommendations"][0]["id"], "1")
+        event = dict(id=str(uuid4()), request_id=result["request_id"], event_type="restaurant_selected", place_id="1")
+        self.assertEqual(self.client.post("/api/events", json=event).status_code, 204)
 
     def test_unknown_exclusion_never_passes(self):
         failures, _, _ = rec.checks_for_menu(menu(absent_ingredients=[]), constraints())
@@ -167,17 +199,73 @@ class MealFlowTest(TestCase):
                 self.assertEqual(self.client.post("/api/recommend", json=value).status_code, 400)
         self.assertEqual(self.client.post("/api/recommend", json={"query": "x"}, headers={"Origin": "https://evil.example"}).status_code, 403)
 
-    def test_missing_parser_key_is_explicit(self):
-        for enabled, key in [("", ""), ("1", ""), ("0", "project-test-key")]:
-            with self.subTest(enabled=enabled, key_present=bool(key)), patch.dict(os.environ, {
-                "OPENAI_API_KEY": "shared-key-must-never-be-used",
-                "WHERE_FOOD_ENABLE_OPENAI": enabled, "WHERE_FOOD_OPENAI_API_KEY": key,
-            }), patch("openai.OpenAI") as client:
-                response = self.client.post("/api/recommend", json={"query": "강남역에서 국밥"})
+    def test_local_parser_ignores_cloud_keys_hosts_and_proxies(self):
+        parsed = constraints(location_text="강남역", walking_minutes_max=None, budget_krw=15000,
+                             excluded_ingredients=[], dish_tags=[], atmosphere_tags=[], source_spans=[
+                                 rec.SourceSpan(field="location_text", text="강남역"),
+                                 rec.SourceSpan(field="budget_krw", text="1만 5천 원 이하")])
+        self.mock_ollama(parsed.model_dump_json())
+        with patch.dict(os.environ, {
+            "OPENAI_API_KEY": "shared-key-must-never-be-used",
+            "WHERE_FOOD_OPENAI_API_KEY": "old-project-key-must-never-be-used",
+            "WHERE_FOOD_ENABLE_OPENAI": "1", "OLLAMA_HOST": "https://remote.example",
+            "OLLAMA_MODEL": "qwen3.5:cloud", "HTTPS_PROXY": "https://proxy.example",
+        }):
+            self.assertEqual(rec.parse_constraints("강남역에서 1만 5천 원 이하"), parsed)
+        args, kwargs = self.ollama.request.call_args
+        self.assertEqual(args, ("POST", "http://127.0.0.1:11434/api/chat"))
+        self.assertIs(self.ollama.trust_env, False)
+        self.assertFalse(kwargs["allow_redirects"])
+        self.assertNotIn("headers", kwargs)
+        self.assertEqual(kwargs["json"]["model"], "qwen3.5:9b")
+        self.assertFalse(kwargs["json"]["think"])
+        self.assertFalse(kwargs["json"]["stream"])
+        self.assertEqual(kwargs["json"]["format"], rec.MealConstraints.model_json_schema())
+
+    def test_ollama_failure_codes_and_no_retries(self):
+        for error, status, code in [
+            (rec.requests.ConnectionError(), 503, "ollama_unavailable"),
+            (rec.requests.Timeout(), 504, "ollama_timeout"),
+        ]:
+            with self.subTest(code=code):
+                self.ollama.request.reset_mock()
+                self.ollama.request.side_effect = error
+                response = self.client.post("/api/recommend", json={"query": "강남역"})
+                self.assertEqual(response.status_code, status)
+                self.assertEqual(response.get_json()["code"], code)
+                self.ollama.request.assert_called_once()
+        self.ollama.request.side_effect = None
+        for status in (301, 404, 500):
+            with self.subTest(status=status):
+                self.ollama.request.return_value.status_code = status
+                response = self.client.post("/api/recommend", json={"query": "강남역"})
                 self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.get_json()["code"], "ollama_model_missing" if status == 404 else "ollama_unavailable")
+
+    def test_local_health_checks_model_without_inference(self):
+        self.mock_ollama(models=[{"name": "qwen3.5:9b", "digest": "test-digest"}])
+        result = self.client.get("/api/health").get_json()
+        self.assertTrue(result["parser"]["ready"])
+        self.assertEqual(result["parser"]["provider"], "ollama")
+        self.assertEqual(self.ollama.request.call_args.args, ("GET", rec.OLLAMA_URL + "/api/tags"))
+        self.mock_ollama(models=[{"name": "qwen3.5:2b"}])
+        self.assertEqual(self.client.get("/api/health").get_json()["parser"]["code"], "ollama_model_missing")
+        self.ollama.request.side_effect = rec.requests.ConnectionError()
+        self.assertFalse(self.client.get("/api/health").get_json()["parser"]["ready"])
+
+    def test_busy_and_invalid_timeout_do_not_call_model(self):
+        rec.PARSER_LOCK.acquire()
+        try:
+            response = self.client.post("/api/recommend", json={"query": "강남역"})
+            self.assertEqual(response.status_code, 429)
+            self.assertEqual(response.get_json()["code"], "parser_busy")
+        finally:
+            rec.PARSER_LOCK.release()
+        for value in ("0", "301", "nan", ""):
+            with patch.dict(os.environ, {"WHERE_FOOD_OLLAMA_TIMEOUT_SECONDS": value}):
+                response = self.client.post("/api/recommend", json={"query": "강남역"})
                 self.assertEqual(response.get_json()["code"], "parser_not_configured")
-                self.assertFalse(self.client.get("/api/health").get_json()["parser_configured"])
-                client.assert_not_called()
+        self.ollama.request.assert_not_called()
 
     def test_unsupported_terms_request_clarification(self):
         result = self.call_recommend(c=constraints(unknown_terms=["비건 전용 주방"])).get_json()
@@ -209,22 +297,35 @@ class MealFlowTest(TestCase):
             import_csv(path, self.path)
         self.assertEqual(db.menu_count(self.path), 1)
 
-    def test_parser_rejects_unanchored_evidence_and_refusal(self):
+    def test_parser_rejects_unanchored_evidence_and_incomplete_json(self):
         parsed = constraints(location_text=None, walking_minutes_max=None, budget_krw=None,
                              excluded_ingredients=[], dish_tags=[], atmosphere_tags=[],
                              source_spans=[rec.SourceSpan(field="budget_krw", text="없는 원문")])
-        with patch.dict(os.environ, {
-            "OPENAI_API_KEY": "shared-key-must-never-be-used",
-            "WHERE_FOOD_ENABLE_OPENAI": "1", "WHERE_FOOD_OPENAI_API_KEY": "test-not-a-real-key",
-        }), patch("openai.OpenAI") as client:
-            create = client.return_value.__enter__.return_value.responses.parse
-            create.return_value = SimpleNamespace(status="completed", output_parsed=parsed)
+        for content, changes in [(parsed.model_dump_json(), {}), ("not JSON", {}),
+                                 ("{}", {}), ("{}", {"done": False}),
+                                 ("{}", {"done_reason": "length"}), ("{}", {"message": None})]:
+            with self.subTest(changes=changes):
+                self.mock_ollama(content, **changes)
+                with self.assertRaises(rec.RecommendationError) as error:
+                    rec.parse_constraints("안녕")
+                self.assertEqual(error.exception.code, "parse_failed")
+                self.assertFalse(rec.PARSER_LOCK.locked())
+
+    def test_parser_rejects_wrong_numeric_value_and_duplicate_spans(self):
+        parsed = constraints(walking_minutes_max=None, budget_krw=15001,
+                             excluded_ingredients=[], dish_tags=[], atmosphere_tags=[], source_spans=[
+                                 rec.SourceSpan(field="budget_krw", text="15000원 이하")])
+        for case in (parsed, parsed.model_copy(update={"budget_krw": 15000, "source_spans": parsed.source_spans * 2})):
+            self.mock_ollama(case.model_dump_json())
             with self.assertRaises(rec.RecommendationError):
-                rec.parse_constraints("안녕")
-            client.assert_called_with(api_key="test-not-a-real-key", timeout=25, max_retries=0)
-            create.return_value = SimpleNamespace(status="completed", output_parsed=None)
-            with self.assertRaises(rec.RecommendationError):
-                rec.parse_constraints("안녕")
+                rec.parse_constraints("15000원 이하")
+
+    def test_evaluation_counts_semantic_mismatch_as_failure(self):
+        parsed = rec.MealConstraints(**EMPTY, source_spans=[])
+        with patch("scripts.evaluate_parser.parse_constraints", return_value=parsed), redirect_stdout(StringIO()):
+            summary = evaluate([("empty", "식당 추천", {}), ("omitted", "땅콩 빼고", {"excluded_ingredients": ["땅콩"]})])
+        self.assertEqual(summary["cases"], 2)
+        self.assertEqual(summary["passed"], 1)
 
     def test_weather_failure_does_not_predict_fake_zero_degrees(self):
         with patch.dict(os.environ, {"WEATHER_API_KEY": ""}), patch.object(rec, "kakao_get", return_value={}), patch("app.weather_hints") as predict:
