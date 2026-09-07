@@ -1,84 +1,89 @@
-// 오늘의 추천 메뉴와 AI 취향 입력 UI
+function invalidateRecommendations() {
+    recommendationVersion += 1;
+    recommendationController?.abort();
+    recommendationController = null;
+    currentRequestId = null;
+    currentPlaces = [];
+    document.getElementById('recommend-submit').disabled = false;
+    document.getElementById('recommendation-form').setAttribute('aria-busy', 'false');
+    document.getElementById('map-and-list-section').hidden = true;
+    document.getElementById('search-results-list').replaceChildren();
+    document.getElementById('parsed-constraints').replaceChildren();
+    document.getElementById('location-options').replaceChildren();
+    document.getElementById('recommendation-status').textContent = '';
+    document.getElementById('event-status').textContent = '';
+    removeMarkers();
+}
+
+async function submitRecommendation(originPlaceId = null) {
+    const query = document.getElementById('meal-query').value.trim();
+    if (!query) return;
+    invalidateRecommendations();
+    const version = recommendationVersion;
+    const controller = new AbortController();
+    recommendationController = controller;
+    const status = document.getElementById('recommendation-status');
+    const submit = document.getElementById('recommend-submit');
+    submit.disabled = true;
+    document.getElementById('recommendation-form').setAttribute('aria-busy', 'true');
+    status.textContent = '조건과 실제 메뉴 근거를 확인하고 있어요…';
+    try {
+        const response = await fetch('/api/recommend', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            signal: controller.signal,
+            body: JSON.stringify({
+                query, lat: userPosition?.lat ?? null, lon: userPosition?.lon ?? null,
+                origin_place_id: originPlaceId
+            })
+        });
+        const result = await response.json();
+        if (version !== recommendationVersion) return;
+        if (!response.ok) throw new Error(result.error || '추천에 실패했습니다.');
+        currentRequestId = result.request_id;
+        currentPlaces = result.recommendations;
+        renderDecisionResults(result);
+        if (result.recommendations.length) {
+            // Record actual rendering, not merely successful HTTP delivery.
+            sendEvent('recommendations_viewed', null, currentRequestId)
+                .catch(() => showEventError(version));
+        }
+    } catch (error) {
+        if (error.name !== 'AbortError' && version === recommendationVersion) {
+            status.textContent = error.message || '연결을 확인하고 다시 시도해주세요.';
+        }
+    } finally {
+        if (version === recommendationVersion) {
+            submit.disabled = false;
+            document.getElementById('recommendation-form').setAttribute('aria-busy', 'false');
+            recommendationController = null;
+        }
+    }
+}
+
+document.getElementById('recommendation-form').addEventListener('submit', event => {
+    event.preventDefault();
+    submitRecommendation();
+});
+document.getElementById('meal-query').addEventListener('input', () => {
+    selectedOriginPlaceId = null;
+    invalidateRecommendations();
+});
 
 function updateRecommendationUI(recommendations) {
-    const carouselInner = document.getElementById('recommendation-carousel-inner');
-    const foodImageMap = {
-        '치킨': '/static/images/치킨.png', '한식': '/static/images/한식.png', '족발/보쌈': '/static/images/족발.png',
-        '중식': '/static/images/중식.png', '돈까스/일식': '/static/images/일식.png', '아시안/양식': '/static/images/양식.png',
-        '피자': '/static/images/피자.png', '분식': '/static/images/분식.png', '회': '/static/images/회.png',
-        '패스트푸드': '/static/images/패스트푸드.png', '찜탕': '/static/images/찜탕.png', '카페/디저트': '/static/images/카페.png',
-        '도시락': '/static/images/도시락.png', 'default': '/static/images/한식.png'
-    };
-
-    carouselInner.innerHTML = recommendations.reduce((html, food, index) => {
-        if (index % 3 === 0) html += `${index ? '</div></div>' : ''}<div class="carousel-item ${index ? '' : 'active'}"><div class="row row-cols-1 row-cols-md-3 g-3">`;
-        const imageUrl = foodImageMap[food.name] || foodImageMap.default;
-        return html + `
-            <div class="col">
-                <button type="button" class="card h-100 food-card w-100" onclick="selectFood('${food.name}')" aria-label="${food.name} 선택">
-                    <span class="food-rank">${index + 1}위</span>
-                    <img src="${imageUrl}" class="card-img-top" alt="">
-                    <span class="card-body text-center">
-                        <strong class="card-title d-block">${food.name}</strong>
-                        <small class="card-text text-muted">추천 지수 ${food.prob}</small>
-                    </span>
-                </button>
-            </div>`;
-    }, '') + (recommendations.length ? '</div></div>' : '');
-
-    document.getElementById('recommendation-section').hidden = false;
-    selectedFood = null;
-    document.getElementById('ai-recommend').hidden = true;
+    const container = document.getElementById('weather-hints');
+    container.replaceChildren();
+    recommendations.forEach(food => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'choice-button';
+        button.textContent = food.name;
+        button.addEventListener('click', () => {
+            invalidateRecommendations();
+            document.getElementById('meal-query').value = food.name + ' 메뉴를 추천해줘';
+            document.getElementById('meal-query').focus();
+        });
+        container.appendChild(button);
+    });
+    document.getElementById('recommendation-section').hidden = !recommendations.length;
 }
-
-function selectFood(foodName) {
-    selectedFood = foodName;
-    setPreferenceVisible(false);
-    noButton.classList.remove('active');
-    document.getElementById('ai-recommend').hidden = false;
-    document.getElementById('ai-recommend').scrollIntoView({ behavior: 'smooth' });
-}
-
-const heatmapToggle = document.getElementById('toggleLink');
-const heatmapContent = document.getElementById('toggleContent');
-
-heatmapToggle.addEventListener('click', () => {
-    const willOpen = heatmapContent.hidden;
-    heatmapContent.hidden = !willOpen;
-    heatmapToggle.setAttribute('aria-expanded', willOpen);
-    heatmapToggle.innerHTML = `<i class="bi bi-bar-chart"></i> 분석 결과 ${willOpen ? '닫기' : '보기'}`;
-});
-
-const preferenceSection = document.getElementById('ai-preference-section');
-const preferenceInput = document.getElementById('food-preference');
-const yesButton = document.getElementById('ai-yes-btn');
-const noButton = document.getElementById('ai-no-btn');
-
-function setPreferenceVisible(visible) {
-    preferenceSection.hidden = !visible;
-    yesButton.classList.toggle('active', visible);
-    noButton.classList.toggle('active', !visible);
-    yesButton.setAttribute('aria-expanded', visible);
-    noButton.setAttribute('aria-expanded', false);
-    if (visible) preferenceInput.focus();
-}
-
-yesButton.addEventListener('click', () => setPreferenceVisible(true));
-noButton.addEventListener('click', () => {
-    if (!selectedFood) return;
-    setPreferenceVisible(false);
-    searchAndDisplayPlaces(selectedFood);
-    document.getElementById('map-and-list-section').scrollIntoView({ behavior: 'smooth' });
-});
-
-document.getElementById('ai-preference-form').addEventListener('submit', event => {
-    event.preventDefault();
-    const preference = preferenceInput.value.trim();
-    if (!preference) return;
-    if (!userPosition) {
-        alert('먼저 위치를 검색하거나 위치 권한을 허용해주세요.');
-        return;
-    }
-    searchAndDisplayPlaces(preference);
-    document.getElementById('map-and-list-section').scrollIntoView({ behavior: 'smooth' });
-});

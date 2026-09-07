@@ -1,12 +1,11 @@
 //날씨 UI 함수, 현재 위치 기반 날씨 조회
 
 function updateWeatherUI(weather, location) {
-    console.log("✅ 서버로부터 받은 실제 날씨 데이터:", weather);
     if (weather.error) {
-        document.getElementById('loading').innerHTML = `<p class="text-danger">${weather.error}</p>`;
+        document.getElementById('loading').textContent = weather.error;
         return;
     }
-    document.getElementById('location-name').innerHTML = `<i class="bi bi-geo-alt-fill"></i> ${location.name}`;
+    document.getElementById('location-name').textContent = location.name;
     const { icon, description } = getWeatherVisuals(weather.rain_type_code, weather.sky_code);
     document.getElementById('weather-icon').className = `bi ${icon} weather-icon`;
     document.getElementById('weather-description').textContent = description;
@@ -20,7 +19,7 @@ function updateWeatherUI(weather, location) {
 function getWeatherVisuals(rainType, sky) {
     // rainType 또는 sky 값이 null, undefined, 빈 문자열일 경우를 대비한 기본값 설정
     const safeRainType = String(rainType || '0');
-    const safeSky = String(sky || '1');
+    const safeSky = String(sky || '');
 
     // 1. 먼저 강수 형태(PTY)를 확인하여 비나 눈이 오는지 판단합니다.
     switch (safeRainType) {

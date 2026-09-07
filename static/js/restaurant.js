@@ -1,181 +1,147 @@
-//맛집 검색, 리스트 출력, 정렬 담당
+// All user/provider text is rendered as text nodes; URLs are restricted to HTTP(S).
+function node(tag, text, className = '') {
+    const element = document.createElement(tag);
+    element.textContent = text;
+    element.className = className;
+    return element;
+}
 
-// ❗️ 새로운 맛집 검색 및 표시 함수
-async function searchAndDisplayPlaces(keyword) {
-    // 1. 맛집 지도 및 리스트 섹션을 화면에 표시하고 UI를 초기 상태로 설정합니다.
-    document.getElementById('map-and-list-section').hidden = false;
-    document.getElementById('map-title').textContent = `주변 '${keyword}' 맛집 지도 🗺️`;
-    document.getElementById('sort-buttons').hidden = false;
-    setActiveSortButton('accuracy'); // 기본 정렬 버튼 활성화
-
-    // 2. 검색 결과를 보여줄 리스트 영역에 로딩 스피너를 표시합니다.
-    const resultsListEl = document.getElementById('search-results-list');
-    resultsListEl.innerHTML = `
-        <div class="d-flex justify-content-center mt-3">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="ms-2 mb-0">맛집 정보 로딩 중...</p>
-        </div>`;
-
-    // 2. [핵심] 캐시 키에 '위치 정보'를 추가합니다.
-    // 현재 사용자의 위도와 경도
-    const currentLat = userPosition.getLat();
-    const currentLon = userPosition.getLng();
-
-    const locationKey = `${currentLat.toFixed(3)}_${currentLon.toFixed(3)}`;
-
-    // 최종 캐시 키 = "places_음식카테고리_위치정보" (예: 'places_치킨_37.498_127.027')
-    const cacheKey = `places_${keyword}_${locationKey}`;
-    
-    //고유한 캐시 키로 데이터확인
-    const cachedData = sessionStorage.getItem(cacheKey);
-
-    if (cachedData) {
-        //캐시가 있는 경우 (Cache Hit)
-        console.log(`[Cache Hit] '${cacheKey}'에 대한 캐시된 데이터를 사용합니다.`);
-        
-        const places = JSON.parse(cachedData);
-        
-        originalPlaces = [...places];
-        currentPlaces = [...places];
-        
-        displayPlaces(currentPlaces);
-        setTimeout(() => map.relayout(), 0);
-        
-        return; // API 호출 없이 함수 종료
-    }
-
-    // 캐시가 없는 경우 (Cache Miss)
-    console.log(`[Cache Miss] '${cacheKey}'에 대한 데이터를 서버에서 가져옵니다.`);
+function externalLink(label, url) {
+    const link = node('a', label);
     try {
-        // API 호출 시에는 정확한 위도/경도를 사용합니다.
-        const response = await fetch('/search-places', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                keyword: keyword,
-                lat: currentLat, // 정확한 위도
-                lon: currentLon  // 정확한 경도
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`맛집 검색 서버 응답 오류: ${response.status}`);
-        }
-        
-        const places = await response.json();
-
-        //캐시 키로 저장
-        sessionStorage.setItem(cacheKey, JSON.stringify(places));
-        console.log(`'${cacheKey}'에 대한 데이터를 캐시에 저장했습니다.`);
-
-        originalPlaces = [...places];
-        currentPlaces = [...places];
-
-        displayPlaces(currentPlaces);
-        setTimeout(() => map.relayout(), 0);
-
-    } catch (error) {
-        console.error('맛집 검색 중 오류 발생:', error);
-        resultsListEl.innerHTML = `<p class="text-danger text-center mt-3">${error.message}</p>`;
+        const parsed = new URL(url);
+        if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error();
+        link.href = parsed.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+    } catch {
+        link.removeAttribute('href');
     }
+    return link;
 }
 
-//정렬 버튼 클릭 시 호출되는 함수
-function resortPlaces(sortBy) {
-    setActiveSortButton(sortBy);
-        if (!originalPlaces || originalPlaces.length === 0) return;
+const constraintLabels = {
+    location_text: '장소', walking_minutes_max: '도보 상한(분)',
+    max_distance_m: '직선거리 상한(m)', budget_krw: '1인 예산(원)',
+    excluded_ingredients: '제외 재료', allergens: '알레르기',
+    excluded_foods: '제외 음식·맛', dish_tags: '음식 선호', atmosphere_tags: '분위기 선호'
+};
 
-        let sortedPlaces = [...originalPlaces]; 
-
-        if (sortBy === 'distance') {
-            // 거리 오름차순 (가까운 순)
-            sortedPlaces.sort((a, b) => a.distance - b.distance);
-        } else if (sortBy === 'rating') {
-            // 평점 내림차순 (높은 순), 평점이 같으면 리뷰 수 많은 순
-            sortedPlaces.sort((a, b) => {
-                if (b.rating !== a.rating) return b.rating - a.rating;
-                return b.review_count - a.review_count;
-            });
+function renderDecisionResults(result) {
+    document.getElementById('recommendation-status').textContent = result.message;
+    const constraints = document.getElementById('parsed-constraints');
+    Object.entries(constraintLabels).forEach(([key, label]) => {
+        const value = result.constraints[key];
+        if (value === null || value === undefined || (Array.isArray(value) && !value.length)) return;
+        const required = result.constraints.hard_fields?.includes(key) ? ' · 필수' : '';
+        constraints.appendChild(node('span', label + required + ': ' + (Array.isArray(value) ? value.join(', ') : value), 'constraint-chip'));
+    });
+    result.location_options.forEach(option => {
+        const button = node('button', option.name + ' · ' + option.address, 'choice-button');
+        button.type = 'button';
+        button.addEventListener('click', () => submitRecommendation(option.id));
+        document.getElementById('location-options').appendChild(button);
+    });
+    if (!result.recommendations.length) {
+        const rejected = Object.entries(result.diagnostics?.rejected || {});
+        if (rejected.length) {
+            const list = document.createElement('ul');
+            rejected.forEach(([reason, count]) => list.appendChild(node('li', reason + ' (' + count + '개 후보)')));
+            document.getElementById('location-options').appendChild(list);
         }
-    
-    currentPlaces = sortedPlaces;
-    displayPlaces(sortedPlaces);
-}
-
-
-//지도와 리스트를 한 번에 표시하는 통합 함수
-function displayPlaces(places) {
-    displayPlacesOnMap(places);
-    displayPlacesOnList(places);
-}
-
-
- // 리스트에 맛집 정보 표시 (평점 표시 기능 추가)
-function displayPlacesOnList(places) {
-    const listEl = document.getElementById('search-results-list');
-    listEl.innerHTML = '<ul class="list-group"></ul>';
-    const ulEl = listEl.querySelector('ul');
-
-    if (places.length === 0) {
-        listEl.innerHTML = `<p class="text-muted text-center mt-3">검색 결과가 없습니다.</p>`;
         return;
     }
+    document.getElementById('map-and-list-section').hidden = false;
+    document.getElementById('map-title').textContent = result.origin.name + ' 주변 추천';
+    document.getElementById('decision-notice').textContent = result.notice || '';
+    displayPlacesOnList(result.recommendations);
+    if (map && result.origin) {
+        moveMainMarker(new kakao.maps.LatLng(result.origin.lat, result.origin.lon));
+        map.relayout();
+        displayPlacesOnMap(result.recommendations);
+    }
+}
 
-    places.slice(0, 5).forEach((place, i) => { // 최대 5개 표시
-        const itemEl = document.createElement('li');
-        itemEl.className = 'list-group-item';
+function sourceNode(source) {
+    const row = node('p', '', 'source-row');
+    row.appendChild(externalLink(source.title, source.url));
+    row.appendChild(node('small', ' · 근거 기준 ' + (source.observed_on || source.observed_at?.slice(0, 10) || '미확인')));
+    if (source.excerpt) row.appendChild(node('span', ' — ' + source.excerpt));
+    return row;
+}
 
-        let ratingHtml = place.rating > 0 
-            ? `<p class="mb-1"><span class="badge bg-warning text-dark">⭐ ${place.rating.toFixed(1)}</span> <span class="text-muted">리뷰 ${place.review_count}</span></p>`
-            : '<p class="mb-1"><span class="text-muted">평점 정보 없음</span></p>';
-        
-        let distanceHtml = place.distance 
-            ? `<p class="mb-1 text-primary"><small>현재 위치에서 ${place.distance}m</small></p>`
-            : '';
-
-        itemEl.innerHTML = `
-            <h6 class="mb-1 fw-bold">${i + 1}. ${place.place_name}</h6>
-            ${ratingHtml}
-            <p class="mb-1"><small>${place.road_address_name || place.address_name}</small></p>
-            ${distanceHtml}
-            <a href="${place.place_url}" target="_blank" class="btn btn-sm btn-outline-primary" id="restaurant-info">상세보기</a>
-            <a href="https://map.kakao.com/link/to/${place.id}" target="_blank" class="btn btn-sm btn-outline-primary">길찾기</a>
-        `;
-        ulEl.appendChild(itemEl);
+function displayPlacesOnList(places) {
+    const list = document.getElementById('search-results-list');
+    list.replaceChildren();
+    const requestId = currentRequestId;
+    const version = recommendationVersion;
+    places.forEach(place => {
+        const card = node('article', '', 'decision-card');
+        card.id = 'place-' + place.id;
+        card.appendChild(node('h3', place.rank + '위 · ' + place.place_name));
+        card.appendChild(node('p', place.menu.name + ' · ' + place.menu.price_krw.toLocaleString('ko-KR') + '원', 'decision-menu'));
+        card.appendChild(node('p', place.road_address_name || place.address_name));
+        card.appendChild(node('p', place.route
+            ? '경로 기준 예상 도보 ' + Math.ceil(place.route.seconds / 60) + '분 · ' + Math.round(place.route.distance_m) + 'm'
+            : '직선거리 ' + Math.round(place.distance) + 'm · 도보 시간 미확인'));
+        card.appendChild(sourceNode(place.menu.source));
+        card.appendChild(sourceNode(place.place_source));
+        if (place.route) card.appendChild(sourceNode({
+            title: '카카오 도보 경로', url: place.route.source_url, observed_at: place.route.observed_at
+        }));
+        const matches = document.createElement('ul');
+        place.matches.forEach(match => {
+            const item = node('li', match.text);
+            item.appendChild(sourceNode(match.source));
+            matches.appendChild(item);
+        });
+        card.appendChild(matches);
+        place.unknown.forEach(text => card.appendChild(node('p', text, 'text-muted')));
+        const actions = node('div', '', 'decision-actions');
+        const feedback = node('p', '', 'feedback-status');
+        feedback.setAttribute('role', 'status');
+        ['restaurant_selected', 'restaurant_rejected'].forEach(type => {
+            const button = node('button', type === 'restaurant_selected' ? '이 식당 선택' : '추천 제외', 'choice-button');
+            button.type = 'button';
+            const eventId = crypto.randomUUID();
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                try {
+                    await sendEvent(type, place.id, requestId, eventId);
+                    if (version !== recommendationVersion) return;
+                    feedback.textContent = type === 'restaurant_selected' ? '선택을 저장했어요. 예약·주문은 별도로 진행해주세요.' : '제외 의견을 저장했어요.';
+                } catch {
+                    button.disabled = false;
+                    feedback.textContent = '저장하지 못했습니다. 버튼을 다시 눌러주세요.';
+                }
+            });
+            actions.appendChild(button);
+        });
+        [['상세보기', place.place_url, 'detail_clicked'],
+         ['길찾기', place.route?.source_url || ('https://map.kakao.com/link/to/' + place.id), 'directions_clicked']]
+            .forEach(([label, url, type]) => {
+                const link = externalLink(label, url);
+                link.addEventListener('click', () => sendEvent(type, place.id, requestId).catch(() => showEventError(version)));
+                actions.appendChild(link);
+            });
+        card.appendChild(actions);
+        card.appendChild(feedback);
+        list.appendChild(card);
     });
 }
 
-
-// 활성 버튼 스타일 변경
-function setActiveSortButton(sortBy) {
-    document.querySelectorAll('#sort-buttons button').forEach(btn => btn.classList.remove('active'));
-    if (sortBy === 'distance') document.querySelector('#sort-buttons button:nth-child(2)').classList.add('active');
-    else if (sortBy === 'rating') document.querySelector('#sort-buttons button:nth-child(3)').classList.add('active');
-    else document.querySelector('#sort-buttons button:nth-child(1)').classList.add('active');
+function showSinglePlaceOnList(place) {
+    document.getElementById('place-' + place.id)?.scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 
+async function sendEvent(type, placeId = null, requestId = currentRequestId, eventId = crypto.randomUUID()) {
+    const response = await fetch('/api/events', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, keepalive: true,
+        body: JSON.stringify({id: eventId, request_id: requestId, event_type: type, place_id: placeId})
+    });
+    if (!response.ok) throw new Error('이벤트 저장 실패');
+}
 
-function showSinglePlaceOnList(place) {
-    const listEl = document.getElementById('search-results-list');
-    
-    // 단일 항목을 표시할 HTML 생성
-    let ratingHtml = place.rating > 0 ? `<p class="mb-1"><span class="badge bg-warning text-dark">⭐ ${place.rating.toFixed(1)}</span> <span class="text-muted">리뷰 ${place.review_count}</span></p>` : '<p class="mb-1"><span class="text-muted">평점 정보 없음</span></p>';
-    let distanceHtml = place.distance ? `<p class="mb-1 text-primary"><small>현재 위치에서 ${place.distance}m</small></p>` : '';
-    
-    const singleItemHtml = `
-        <ul class="list-group">
-            <li class="list-group-item active"> <!-- active 클래스로 하이라이트 -->
-                <h6 class="mb-1 fw-bold">${place.place_name}</h6>
-                ${ratingHtml}
-                <p class="mb-1"><small>${place.road_address_name || place.address_name}</small></p>
-                ${distanceHtml}
-                <a href="${place.place_url}" target="_blank" class="btn btn-sm btn-outline-secondary">상세보기</a>
-                <a href="https://map.kakao.com/link/to/${place.id}" target="_blank" class="btn btn-sm btn-outline-primary">길찾기</a>
-            </li>
-        </ul>
-    `;
-    
-    const backButtonHtml = `<div class="d-grid mt-2"><button class="btn btn-outline-primary" onclick="displayPlacesOnList(currentPlaces.slice(0, 5))">전체 목록으로 돌아가기</button></div>`;
-    
-    listEl.innerHTML = singleItemHtml + backButtonHtml;
+function showEventError(version) {
+    if (version === recommendationVersion) document.getElementById('event-status').textContent = '일부 행동 기록을 저장하지 못했습니다.';
 }

@@ -46,7 +46,6 @@ function displayPlacesOnMap(places) {
         map.setBounds(bounds);
     }
     
-    map.setCenter(mainMarker.getPosition());
 }
 
 function addMarker(place, idx) {
