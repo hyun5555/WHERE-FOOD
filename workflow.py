@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 from langsmith import tracing_context
 
 import recommendation as rec
+from explanations import explain_recommendations
 
 
 class MealState(TypedDict, total=False):
@@ -57,14 +58,22 @@ def respond(state):
     return {"result": result, "steps": [*state["steps"], "RESPOND"]}
 
 
+def explain(state):
+    result = state["result"]
+    explain_recommendations(result, state["constraints"])
+    return {"result": result, "steps": [*state["steps"], "EXPLAIN"]}
+
+
 builder = StateGraph(MealState)
 for name, fn in (("RESOLVE", resolve), ("SEARCH_FILTER_RANK", search), ("CLARIFY", clarify),
-                 ("NO_RESULTS", no_results), ("RESPOND", respond)):
+                 ("NO_RESULTS", no_results), ("EXPLAIN", explain), ("RESPOND", respond)):
     builder.add_node(name, fn)
 builder.add_edge(START, "RESOLVE")
 builder.add_conditional_edges("RESOLVE", lambda s: "CLARIFY" if s["origin"] is None else "SEARCH_FILTER_RANK",
                               ["CLARIFY", "SEARCH_FILTER_RANK"])
-builder.add_conditional_edges("SEARCH_FILTER_RANK", lambda s: "RESPOND" if s["result"]["recommendations"] else "NO_RESULTS",
+builder.add_conditional_edges("SEARCH_FILTER_RANK", lambda s: "EXPLAIN" if s["result"]["recommendations"] else "NO_RESULTS",
+                              ["EXPLAIN", "NO_RESULTS"])
+builder.add_conditional_edges("EXPLAIN", lambda s: "RESPOND" if s["result"]["recommendations"] else "NO_RESULTS",
                               ["RESPOND", "NO_RESULTS"])
 for name in ("CLARIFY", "NO_RESULTS", "RESPOND"):
     builder.add_edge(name, END)
@@ -78,5 +87,5 @@ def run_recommendation(constraints, payload, database_path, weather_provider):
                                    "database_path": database_path, "weather_provider": weather_provider},
                                   config={"callbacks": [], "recursion_limit": 8})
     result = state["result"]
-    result["workflow"] = {"engine": "langgraph", "version": "meal-v1", "steps": state["steps"]}
+    result["workflow"] = {"engine": "langgraph", "version": "meal-v2", "steps": state["steps"]}
     return result

@@ -84,6 +84,18 @@ function displayPlacesOnList(places, weatherContext) {
         card.id = 'place-' + place.id;
         card.appendChild(node('h3', place.rank + '위 · ' + place.place_name));
         card.appendChild(node('p', place.menu.name + ' · ' + place.menu.price_krw.toLocaleString('ko-KR') + '원', 'decision-menu'));
+        const explanation = place.explanation;
+        if (explanation?.method === 'qwen_grounded') {
+            card.appendChild(node('h4', 'Qwen 근거 요약'));
+            explanation.sentences.forEach(sentence => {
+                const source = explanation.sources.find(s => s.source_id === sentence.source_id);
+                if (!source) return;
+                card.appendChild(node('p', sentence.text));
+                card.appendChild(sourceNode(source));
+            });
+        } else if (explanation?.method === 'template') {
+            card.appendChild(node('p', 'AI 요약을 사용하지 못해 기존 근거 설명을 표시합니다.', 'text-muted'));
+        }
         card.appendChild(node('p', place.road_address_name || place.address_name));
         card.appendChild(node('p', place.route
             ? '경로 기준 예상 도보 ' + Math.ceil(place.route.seconds / 60) + '분 · ' + Math.round(place.route.distance_m) + 'm'

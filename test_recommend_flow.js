@@ -201,5 +201,24 @@ const finish = async (promise, data, ok = true) => {
     run('renderDecisionResults(groundedResult)');
     assert(descendants(get('search-results-list')).some(n => n.href === 'https://example.com/weather'));
     assert(descendants(get('search-results-list')).some(n => n.textContent.includes('선택 확률 아님')));
+    grounded.recommendations[0].explanation = {
+        method: 'qwen_grounded', sentences: [{text: '국밥 10,000원 · 예산 이내', source_id: 'p1-s0'},
+            {text: '<img src=x onerror=alert(1)>', source_id: 'p1-s0'},
+            {text: '출처가 없는 문장', source_id: 'missing'}],
+        sources: [{...source, source_id: 'p1-s0'}]
+    };
+    run('renderDecisionResults(groundedResult)');
+    let explanationNodes = descendants(get('search-results-list'));
+    assert(explanationNodes.some(n => n.textContent === 'Qwen 근거 요약'));
+    assert(explanationNodes.some(n => n.textContent === '국밥 10,000원 · 예산 이내'));
+    assert(!explanationNodes.some(n => n.tagName === 'img'), 'explanation HTML must remain text');
+    assert(!explanationNodes.some(n => n.textContent === '출처가 없는 문장'));
+    assert(explanationNodes.some(n => n.href === source.url));
+    grounded.recommendations[0].explanation = {method: 'template', sentences: [], sources: [], fallback_reason: 'ollama_timeout'};
+    run('renderDecisionResults(groundedResult)');
+    explanationNodes = descendants(get('search-results-list'));
+    assert(explanationNodes.some(n => n.textContent === 'AI 요약을 사용하지 못해 기존 근거 설명을 표시합니다.'));
+    assert(explanationNodes.some(n => n.textContent === '예산 이내'), 'existing matches survive fallback');
+    assert(!explanationNodes.some(n => n.textContent === 'Qwen 근거 요약'), 'previous generated text is cleared');
     console.log('PASS: weather observations, parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, XSS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

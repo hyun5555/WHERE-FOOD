@@ -136,7 +136,7 @@ async function submitRecommendation(originPlaceId = null) {
     const submit = document.getElementById('confirm-search');
     submit.disabled = true;
     document.getElementById('constraint-editor-form').setAttribute('aria-busy', 'true');
-    status.textContent = '확인한 조건을 검증하고 식당을 검색하고 있어요. 조건을 다시 추론하지 않습니다…';
+    status.textContent = '확인한 조건으로 검색하고 Qwen 근거 요약을 준비하고 있어요. 조건은 다시 해석하지 않습니다…';
     try {
         const response = await fetch('/api/recommend', {method: 'POST', headers: {'Content-Type': 'application/json'},
             signal: controller.signal, body: JSON.stringify(payload)});

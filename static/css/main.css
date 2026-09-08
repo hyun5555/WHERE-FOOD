@@ -542,6 +542,7 @@ a:focus-visible {
 .privacy-note { font-size: 12px; color: var(--muted); line-height: 1.7; }
 .decision-card { border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-bottom: 18px; overflow-wrap: anywhere; }
 .decision-card h3 { font-size: 20px; font-weight: 800; }
+.decision-card h4 { margin-top: 14px; font-size: 15px; font-weight: 700; }
 .decision-menu { font-weight: 700; color: var(--blue-dark); }
 .decision-card p { margin-bottom: 8px; font-size: 14px; }
 .decision-card .source-row { font-size: 12px; color: var(--muted); }
