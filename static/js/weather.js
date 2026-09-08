@@ -17,9 +17,9 @@ function updateWeatherUI(weather, location) {
 }
 
 function getWeatherVisuals(rainType, sky) {
-    // rainType 또는 sky 값이 null, undefined, 빈 문자열일 경우를 대비한 기본값 설정
-    const safeRainType = String(rainType || '0');
-    const safeSky = String(sky || '');
+    // Missing observations are not the same as PTY=0 (no precipitation).
+    const safeRainType = String(rainType ?? '').trim();
+    const safeSky = String(sky ?? '').trim();
 
     // 1. 먼저 강수 형태(PTY)를 확인하여 비나 눈이 오는지 판단합니다.
     switch (safeRainType) {
@@ -38,6 +38,10 @@ function getWeatherVisuals(rainType, sky) {
         case '1': return { icon: 'bi-sun-fill', description: '맑음' };
         case '3': return { icon: 'bi-cloud-sun-fill', description: '구름많음' };
         case '4': return { icon: 'bi-clouds-fill', description: '흐림' };
-        default:  return { icon: 'bi-question-circle', description: '알 수 없음' };
+        default:
+            // getUltraSrtNcst supplies PTY but not SKY. No rain does not mean sunny.
+            return safeRainType === '0'
+                ? { icon: 'bi-thermometer-half', description: '강수 없음' }
+                : { icon: 'bi-question-circle', description: '날씨 상태 미확인' };
     }
 }

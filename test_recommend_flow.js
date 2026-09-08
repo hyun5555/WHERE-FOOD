@@ -14,6 +14,7 @@ class Element {
         this.disabled = false;
         this.checked = false;
         this.attributes = {};
+        this.style = {};
         this.handlers = {};
     }
     appendChild(child) { this.children.push(child); return child; }
@@ -45,7 +46,7 @@ const context = vm.createContext({
         return new Promise(resolve => pending.push(resolve));
     }
 });
-for (const file of ['state', 'restaurant', 'recommend']) {
+for (const file of ['state', 'weather', 'restaurant', 'recommend']) {
     vm.runInContext(fs.readFileSync('static/js/' + file + '.js', 'utf8'), context);
 }
 const run = code => vm.runInContext(code, context);
@@ -76,6 +77,32 @@ const finish = async (promise, data, ok = true) => {
 };
 
 (async () => {
+    // NCST has PTY but no SKY: no precipitation is known, sunshine is not.
+    for (const rainType of ['0', 0]) {
+        for (const sky of [null, undefined, '', '99']) {
+            context.weatherCase = {rainType, sky};
+            assert.equal(run('getWeatherVisuals(weatherCase.rainType, weatherCase.sky).description'), '강수 없음');
+        }
+    }
+    for (const rainType of [null, undefined, '', '99', false]) {
+        context.rainCase = rainType;
+        assert.equal(run('getWeatherVisuals(rainCase, null).description'), '날씨 상태 미확인');
+    }
+    for (const [code, text] of [['1','비'], ['2','비/눈'], ['3','눈'], ['4','소나기'],
+                                ['5','빗방울'], ['6','빗방울/눈날림'], ['7','눈날림']]) {
+        assert.equal(run(`getWeatherVisuals('${code}', '1').description`), text);
+    }
+    for (const [sky, text] of [['1','맑음'], ['3','구름많음'], ['4','흐림']]) {
+        assert.equal(run(`getWeatherVisuals('0', '${sky}').description`), text);
+    }
+    run("updateWeatherUI({temp:24.5, humidity:71, wind_speed:1.3, rain_type_code:'0', sky_code:null}, {name:'테스트 위치'})");
+    assert.equal(get('weather-description').textContent, '강수 없음');
+    assert.equal(get('weather-icon').className, 'bi bi-thermometer-half weather-icon');
+    assert.equal(get('temperature').textContent, '24.5°C');
+    assert.equal(get('humidity').textContent, '71%');
+    assert.equal(get('wind-speed').textContent, '1.3 m/s');
+    assert.equal(get('weather-info').hidden, false);
+
     get('meal-query').value = '강남역에서 15000원 이하';
     const extraction = run('parseRecommendation()');
     assert.equal(requests[0].url, '/api/constraints');
@@ -174,5 +201,5 @@ const finish = async (promise, data, ok = true) => {
     run('renderDecisionResults(groundedResult)');
     assert(descendants(get('search-results-list')).some(n => n.href === 'https://example.com/weather'));
     assert(descendants(get('search-results-list')).some(n => n.textContent.includes('선택 확률 아님')));
-    console.log('PASS: parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, XSS');
+    console.log('PASS: weather observations, parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, XSS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

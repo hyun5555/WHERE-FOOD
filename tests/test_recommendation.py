@@ -621,6 +621,11 @@ class MealFlowTest(TestCase):
         self.assertEqual((observed.minute, observed.second, observed.microsecond), (0, 0, 0))
         self.assertEqual(request.call_args.kwargs["params"]["base_time"], observed.strftime("%H00"))
         self.assertEqual(len(result["recommendations"]), 3)
+        self.assertEqual(result["weather"]["rain_type_code"], "0")
+        self.assertIsNone(result["weather"]["sky_code"], "NCST must not invent a sunny sky")
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("맑음/흐림 정보는 제공되지 않습니다.", page)
+        self.assertIn("/static/js/weather.js?v=4", page)
 
 
 if __name__ == "__main__":
