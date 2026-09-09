@@ -220,5 +220,26 @@ const finish = async (promise, data, ok = true) => {
     assert(explanationNodes.some(n => n.textContent === 'AI 요약을 사용하지 못해 기존 근거 설명을 표시합니다.'));
     assert(explanationNodes.some(n => n.textContent === '예산 이내'), 'existing matches survive fallback');
     assert(!explanationNodes.some(n => n.textContent === 'Qwen 근거 요약'), 'previous generated text is cleared');
-    console.log('PASS: weather observations, parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, XSS');
+    context.classified = {...result, diagnostics: {rejections: [
+        {category: 'constraint_mismatch', code: 'budget_exceeded', message: '예산 초과'},
+        {category: 'missing_evidence', code: 'allergy_evidence_missing', message: '땅콩 확인 근거 없음'},
+        {category: 'missing_evidence', code: 'menu_invalid', message: '<img src=x onerror=alert(1)>'},
+        {category: 'expired_evidence', code: 'menu_evidence_expired', message: '메뉴 자료 만료'}
+    ]}};
+    run('invalidateRecommendations(); renderDecisionResults(classified)');
+    let reasons = descendants(get('location-options'));
+    assert(reasons.some(n => n.textContent === '조건 불충족 · 1건'));
+    assert(reasons.some(n => n.textContent === '근거 부족 · 2건'));
+    assert(reasons.some(n => n.textContent === '자료 만료 · 1건'));
+    assert(reasons.some(n => n.textContent.includes('식당 수가 아닙니다')));
+    assert(!reasons.some(n => n.tagName === 'img'), 'diagnostics remain text');
+    assert.equal(get('map-and-list-section').hidden, false, 'partial results also show diagnostics');
+    assert(descendants(get('search-results-list')).some(n => n.textContent === '선택적 선호 미확인 · 추천 제외 사유 아님'));
+    context.classified.recommendations = [];
+    run('invalidateRecommendations(); renderDecisionResults(classified)');
+    assert.equal(get('map-and-list-section').hidden, true);
+    assert(descendants(get('location-options')).some(n => n.textContent.includes('알레르기는 근거 없이 통과시키지 않습니다')));
+    run('invalidateRecommendations()');
+    assert.equal(get('location-options').children.length, 0, 'old diagnostics clear on edit');
+    console.log('PASS: weather observations, parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, evidence diagnostics, XSS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

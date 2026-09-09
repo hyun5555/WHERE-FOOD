@@ -46,15 +46,34 @@ function renderDecisionResults(result) {
         button.addEventListener('click', () => submitRecommendation(option.id));
         document.getElementById('location-options').appendChild(button);
     });
-    if (!result.recommendations.length) {
+    const details = result.diagnostics?.rejections;
+    if (details?.length) {
+        const container = document.getElementById('location-options');
+        container.appendChild(node('h4', '추천에서 제외한 이유'));
+        container.appendChild(node('p', '검사 사유 건수이며 식당 수가 아닙니다. 메뉴별 사유와 메뉴 자료가 없는 장소를 집계합니다. 한 메뉴에 여러 사유가 있을 수 있고, 앞 단계에서 제외되면 뒤 조건은 검사하지 않습니다.', 'text-muted'));
+        const categories = {constraint_mismatch: '조건 불충족', missing_evidence: '근거 부족', expired_evidence: '자료 만료'};
+        Object.entries(categories).forEach(([category, label]) => {
+            const reasons = details.filter(reason => reason.category === category);
+            if (!reasons.length) return;
+            const section = node('details', '');
+            section.appendChild(node('summary', label + ' · ' + reasons.length + '건'));
+            const messages = new Map();
+            reasons.forEach(reason => messages.set(reason.message, (messages.get(reason.message) || 0) + 1));
+            const list = document.createElement('ul');
+            messages.forEach((count, message) => list.appendChild(node('li', message + ' · ' + count + '건')));
+            section.appendChild(list);
+            container.appendChild(section);
+        });
+        container.appendChild(node('p', '근거 부족·자료 만료는 조건 불충족을 뜻하지 않습니다. 필수 조건은 자동 완화하지 않으며, 알레르기는 근거 없이 통과시키지 않습니다.', 'text-muted'));
+    } else if (!result.recommendations.length) {
         const rejected = Object.entries(result.diagnostics?.rejected || {});
         if (rejected.length) {
             const list = document.createElement('ul');
-            rejected.forEach(([reason, count]) => list.appendChild(node('li', reason + ' (' + count + '개 후보)')));
+            rejected.forEach(([reason, count]) => list.appendChild(node('li', reason + ' (' + count + '건 · 검사 사유)')));
             document.getElementById('location-options').appendChild(list);
         }
-        return;
     }
+    if (!result.recommendations.length) return;
     document.getElementById('map-and-list-section').hidden = false;
     document.getElementById('map-title').textContent = result.origin.name + ' 주변 추천';
     document.getElementById('decision-notice').textContent = result.notice || '';
@@ -112,6 +131,7 @@ function displayPlacesOnList(places, weatherContext) {
             matches.appendChild(item);
         });
         card.appendChild(matches);
+        if (place.unknown.length) card.appendChild(node('h4', '선택적 선호 미확인 · 추천 제외 사유 아님'));
         place.unknown.forEach(text => card.appendChild(node('p', text, 'text-muted')));
         const opening = place.opening_status;
         card.appendChild(node('p', opening

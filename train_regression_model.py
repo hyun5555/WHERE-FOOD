@@ -1,11 +1,13 @@
+"""Fit a legacy aggregate-weather heuristic, not a future user-choice target.
+
+The label is constructed from this dataset's aggregate ratios. A random CV score
+on that label is not evidence of recommendation effectiveness or generalization.
+"""
 import argparse
 from pathlib import Path
 import pandas as pd
-import numpy as np
-from sklearn.model_selection import GridSearchCV
 # ★★★ 회귀 모델 및 평가 지표로 변경 ★★★
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error
 # ------------------------------------
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
@@ -108,28 +110,13 @@ def train_regression_model(df, preprocessor, features):
 
     pipe = Pipeline([
         ('pre', preprocessor),
-        ('reg', RandomForestRegressor(random_state=42)) # RandomForestRegressor 사용
+        ('reg', RandomForestRegressor(n_estimators=100, max_depth=10,
+                                      min_samples_leaf=10, random_state=42, n_jobs=1))
     ])
 
-    # 회귀 모델용 파라미터 그리드
-    param_grid = {
-        'reg__n_estimators': [100],
-        'reg__max_depth': [10],
-        'reg__min_samples_leaf': [10]
-    }
-    
-    # 평가 지표를 회귀용으로 변경 (낮을수록 좋음)
-    grid = GridSearchCV(pipe, param_grid, cv=2, scoring='neg_mean_squared_error', n_jobs=1, verbose=2)
-    
-    print("▶ 회귀 모델 학습 시작...")
-    grid.fit(X, y)
-    print("▶ 회귀 모델 학습 완료")
-    
-    print("\n[최적 모델 정보]")
-    print(grid.best_params_)
-    print(f"최적 MSE 점수: {-grid.best_score_:.4f}")
-
-    return grid.best_estimator_
+    pipe.fit(X, y)
+    print("▶ 집계 기반 날씨 참고 점수 학습 완료 (미래 선택/추천 성능 평가는 수행하지 않음)")
+    return pipe
 
 # --- 3. 실행부 ---
 if __name__ == "__main__":

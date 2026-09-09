@@ -45,9 +45,10 @@ def clarify(state):
 
 def no_results(state):
     result = {**state["result"], "status": "no_results", "next_action": "review_constraints"}
-    result["message"] = ("주변 식당의 검증된 메뉴 데이터가 아직 없습니다."
-                         if not result["diagnostics"]["menus_found"] else
-                         "현재 검색 범위에서 필수 조건을 확인할 수 있는 식당이 없습니다.")
+    counts = result["diagnostics"].get("category_counts", {})
+    summary = " · ".join(f"{label} {counts[key]}건" for key, label in rec.CATEGORY_LABELS.items() if counts.get(key))
+    result["message"] = ("확보한 자료로 모든 필수 조건을 확인한 추천을 만들지 못했습니다. " + summary + "."
+                         if summary else "현재 검색 범위에서 장소 후보를 조회하지 못했습니다. 주변에 식당이 없다는 뜻은 아닙니다.")
     return {"result": result, "steps": [*state["steps"], "NO_RESULTS"]}
 
 

@@ -1,24 +1,24 @@
+"""Legacy category classifier, not the candidate-choice RF in scripts/.
+
+Use observable weather/location/calendar inputs only. Target-derived category
+statistics are deliberately excluded; existing binary artifacts are not migrated.
+"""
 import argparse
 from pathlib import Path
 import pandas as pd
-import numpy as np
-import time
-from datetime import datetime
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report, accuracy_score
 import joblib
 
-# --- 1. 데이터 로드 및 "통계 피처" 생성 함수 ---
-def load_and_create_stat_features(filepath):
+# --- 1. 데이터 로드 및 관측 가능한 피처 생성 ---
+def load_and_prepare_data(filepath):
     """
-    데이터를 로드하고, 통계 기반의 새로운 피처를 생성하여 반환합니다.
+    추론 시에도 알 수 있는 날씨·위치·시간 피처만 반환합니다.
     """
-    df = pd.read_csv(filepath, index_col=0, encoding='utf-8')
+    df = pd.read_csv(filepath, encoding='utf-8')
     df.columns = df.columns.str.strip()
 
     for col in df.select_dtypes(include=['float64', 'int64']).columns:
@@ -43,31 +43,8 @@ def load_and_create_stat_features(filepath):
         if m in [6, 7, 8]: return '여름'
         return '가을'
     df['season'] = df['month'].apply(month_to_season)
-    df['sample_weight'] = pd.to_numeric(df['주문 건수'], errors='coerce').fillna(1)
-
-    # --- ✅ 핵심: 통계 테이블 계산 ---
-    print("▶ 통계 피처 생성을 시작합니다...")
-    # 각 음식 카테고리별로, 특정 날씨 상태일 때의 주문 비율을 계산
-    # 기온
-    temp_stats = df.groupby(["배달상점 업종명", "기온상태"])["주문 건수"].sum().unstack(fill_value=0)
-    temp_stats_ratio = (temp_stats.div(temp_stats.sum(axis=1), axis=0) * 100).add_prefix('비율_기온_')
-    # 습도
-    hum_stats = df.groupby(["배달상점 업종명", "습도상태"])["주문 건수"].sum().unstack(fill_value=0)
-    hum_stats_ratio = (hum_stats.div(hum_stats.sum(axis=1), axis=0) * 100).add_prefix('비율_습도_')
-    # 강수
-    rain_stats = df.groupby(["배달상점 업종명", "강수 유형명"])["주문 건수"].sum().unstack(fill_value=0)
-    rain_stats_ratio = (rain_stats.div(rain_stats.sum(axis=1), axis=0) * 100).add_prefix('비율_강수_')
-
-    # --- ✅ 핵심: 통계 정보를 원본 데이터에 새로운 피처로 병합 ---
-    df = pd.merge(df, temp_stats_ratio, on="배달상점 업종명", how="left")
-    df = pd.merge(df, hum_stats_ratio, on="배달상점 업종명", how="left")
-    df = pd.merge(df, rain_stats_ratio, on="배달상점 업종명", how="left")
-    df.fillna(0, inplace=True) # 병합 후 생긴 NaN 값은 0으로 채움
-    print("▶ 통계 피처 생성 및 병합 완료!")
-
-    # --- 전처리기 및 레이블 인코더 생성 (기존과 동일) ---
-    # ❗️ 중요: 새로운 통계 피처들을 numeric_feats 리스트에 추가해야 함
-    numeric_feats = ['기온값', '습도값', '강수량 값', '풍속값'] + list(temp_stats_ratio.columns) + list(hum_stats_ratio.columns) + list(rain_stats_ratio.columns)
+    # Joining statistics by the unknown target leaks its identity into X.
+    numeric_feats = ['기온값', '습도값', '강수량 값', '풍속값']
     cat_feats = [
         '기온상태', '습도상태', '강수 유형명', '바람강도 유형명',
         '광역시도명', '시군구명', 'weekday', 'is_weekend', 'month', 'season'
@@ -92,47 +69,19 @@ def load_and_create_stat_features(filepath):
     return df, preprocessor, le, all_features
 
 # --- 2. 학습 함수 (수정) ---
-def train_model(df, preprocessor, features): # features 인자 추가
+def train_model(df, preprocessor, features):
     X = df[features].copy()
     y = df['y']
      
     
-    class_counts = df['배달상점 업종명'].value_counts().to_dict()
-    
-    total_samples = len(df)
-    num_classes = len(class_counts)
-    
-    weights = df['배달상점 업종명'].apply(
-        lambda x: total_samples / (num_classes * class_counts[x])
-    )
-    # ----------------------------------------------------
-
     pipe = Pipeline([
         ('pre', preprocessor),
-        ('clf', RandomForestClassifier(random_state=42)) 
+        ('clf', RandomForestClassifier(n_estimators=100, max_depth=15,
+                                       class_weight='balanced', random_state=42, n_jobs=1))
     ])
-
-    param_grid = {
-        'clf__n_estimators': [100], 
-        'clf__max_depth': [15]
-    }
-    grid = GridSearchCV(
-        pipe, 
-        param_grid, 
-        cv=2,
-        scoring='f1_weighted', 
-        n_jobs=1,
-        verbose=2
-    )
-
-    print("▶ 모델 학습 시작 (샘플 가중치 적용)...")
-    grid.fit(X, y, clf__sample_weight=weights)
-    print("▶ 모델 학습 완료")
-    
-    best_model = grid.best_estimator_
-    
-    
-    return best_model
+    pipe.fit(X, y)
+    print("▶ 과거 카테고리 모델 학습 완료 (별도 평가 없음; 선택 예측 성능 아님)")
+    return pipe
 
 # --- 3. 실행부 (수정) ---
 if __name__ == "__main__":
@@ -145,8 +94,8 @@ if __name__ == "__main__":
         cli.error(f"학습 CSV를 찾을 수 없습니다: {args.data}")
     filepath = args.data
 
-    # 1. 데이터 로드 및 피처 생성
-    df_full, preprocessor, le, all_features = load_and_create_stat_features(filepath)
+    # 1. 데이터 로드 및 정답 독립적인 피처 생성
+    df_full, preprocessor, le, all_features = load_and_prepare_data(filepath)
 
     # 2. 새로운 피처로 모델 학습
     df_chicken = df_full[df_full['배달상점 업종명'] == '치킨']
@@ -163,4 +112,4 @@ if __name__ == "__main__":
     args.output.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump((final_classifier, final_preprocessor, le), args.output)
     
-    print(f"\n✅ (분류기+통계피처, 전처리기, 인코더)가 '{args.output}'에 저장되었습니다.")
+    print(f"\n✅ (분류기, 전처리기, 인코더)가 '{args.output}'에 저장되었습니다. 별도 검증 전 성능을 주장하지 마세요.")

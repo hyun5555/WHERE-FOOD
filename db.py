@@ -63,10 +63,20 @@ def get_menus(path, place_ids):
         return []
     with connect(path) as con:
         rows = con.execute(
-            "SELECT data_json FROM menu_items WHERE place_id IN ("
+            "SELECT place_id, menu_name, data_json FROM menu_items WHERE place_id IN ("
             + ",".join("?" for _ in place_ids) + ")", list(place_ids)
         ).fetchall()
-    return [json.loads(row[0]) for row in rows]
+    result = []
+    for row in rows:
+        try:
+            raw = json.loads(row[2])
+        except (ValueError, TypeError):
+            raw = None
+        if not isinstance(raw, dict) or raw.get("place_id") != row[0] or raw.get("menu_name") != row[1]:
+            # Preserve identity for diagnostics without treating broken JSON as usable evidence.
+            raw = {"place_id": row[0], "menu_name": row[1], "invalid_record": True}
+        result.append(raw)
+    return result
 
 
 def menu_count(path):
@@ -77,7 +87,15 @@ def menu_count(path):
 def catalog_names(path):
     with connect(path) as con:
         rows = con.execute("SELECT data_json FROM menu_items ORDER BY place_id, menu_name").fetchall()
-    return sorted({json.loads(row[0])["restaurant_name"] for row in rows})[:6]
+    names = set()
+    for row in rows:
+        try:
+            name = json.loads(row[0])["restaurant_name"]
+            if isinstance(name, str) and name.strip():
+                names.add(name.strip())
+        except (ValueError, TypeError, KeyError):
+            continue
+    return sorted(names)[:6]
 
 
 def save_request(path, session_id, result):
@@ -88,6 +106,10 @@ def save_request(path, session_id, result):
     constraints = snapshot.get("constraints", {})
     constraints.pop("location_text", None)
     constraints.pop("source_spans", None)
+    # Unsupported conditions can contain the entire original query, including private text.
+    snapshot["unknown_term_count"] = len(constraints.pop("unknown_terms", []))
+    if snapshot.get("status") == "clarification_required":
+        snapshot["message"] = "조건 또는 위치 재확인 필요"
     for item in snapshot.get("recommendations", []):
         for key in ("x", "y", "address_name", "road_address_name"):
             item.pop(key, None)

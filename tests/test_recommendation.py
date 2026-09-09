@@ -158,7 +158,7 @@ class MealFlowTest(TestCase):
 
     def test_unknown_exclusion_never_passes(self):
         failures, _, _ = rec.checks_for_menu(menu(absent_ingredients=[]), constraints())
-        self.assertIn("땅콩 미사용 근거 없음", failures)
+        self.assertIn("땅콩 미사용 근거 없음", [f["message"] for f in failures])
 
     def test_extract_only_does_not_search_or_save_request(self):
         with patch.object(rec, "search_candidates") as search, patch.object(rec, "kakao_get") as places:
@@ -393,8 +393,85 @@ class MealFlowTest(TestCase):
 
     def test_budget_boundary_and_unknown_price(self):
         self.assertFalse(rec.checks_for_menu(menu(), constraints())[0])
-        self.assertIn("예산 초과", rec.checks_for_menu(menu(price_krw=15001), constraints())[0])
-        self.assertIn("가격 미확인", rec.checks_for_menu(menu(price_krw=None), constraints())[0])
+        self.assertIn("예산 초과", [f["message"] for f in rec.checks_for_menu(menu(price_krw=15001), constraints())[0]])
+        self.assertIn("가격 미확인", [f["message"] for f in rec.checks_for_menu(menu(price_krw=None), constraints())[0]])
+
+    def test_rejection_categories_and_old_price_is_not_a_budget_violation(self):
+        old = {**evidence(), "observed_on": (date.today() - timedelta(days=91)).isoformat()}
+        records = [menu("1", price_krw=20000), menu("2", price_krw=None),
+                   menu("3", price_krw=20000, menu_evidence=old)]
+        result = self.call_recommend(records=records).get_json()
+        self.assertEqual(result["recommendations"], [])
+        self.assertEqual(result["diagnostics"]["category_counts"], {
+            "constraint_mismatch": 1, "missing_evidence": 1, "expired_evidence": 1})
+        by_place = {r["place_id"]: r for r in result["diagnostics"]["rejections"]}
+        self.assertEqual(by_place["1"]["code"], "budget_exceeded")
+        self.assertEqual(by_place["2"]["code"], "price_missing")
+        self.assertEqual(by_place["3"]["code"], "menu_evidence_expired")
+        self.assertIn("근거 부족 1건", result["message"])
+        self.assertIn("자료 만료 1건", result["message"])
+        self.assertNotIn("식당이 없습니다", result["message"])
+
+    def test_allergy_missing_stale_future_and_cross_contact_stay_blocked(self):
+        c = constraints(allergens=["땅콩"])
+        for days, cross_contact, expected in [(None, True, "missing"), (91, True, "expired"),
+                                               (-1, True, "invalid_date"), (0, False, "missing")]:
+            with self.subTest(days=days, cross_contact=cross_contact):
+                proofs = [] if days is None else [dict(term="땅콩", cross_contact_checked=cross_contact,
+                    evidence={**evidence(), "observed_on": (date.today() - timedelta(days=days)).isoformat()})]
+                result = self.call_recommend(records=[menu(allergy_checks=proofs)], c=c).get_json()
+                self.assertEqual(result["recommendations"], [])
+                reason = result["diagnostics"]["rejections"][0]
+                self.assertEqual(reason["field"], "allergens")
+                self.assertEqual(reason["code"], "allergy_evidence_" + expected)
+                self.assertEqual(reason["category"], "expired_evidence" if expected == "expired" else "missing_evidence")
+        verified = menu(allergy_checks=[dict(term="땅콩", cross_contact_checked=True, evidence=evidence())])
+        result = self.call_recommend(records=[verified], c=c).get_json()
+        self.assertEqual(len(result["recommendations"]), 1)
+
+    def test_reason_counts_are_not_restaurant_counts_and_soft_stale_can_pass(self):
+        result = self.call_recommend(records=[menu(absent_ingredients=[])],
+                                     c=constraints(allergens=["우유"], dietary_requirements=["vegan"])).get_json()
+        self.assertEqual(result["diagnostics"]["category_counts"]["missing_evidence"], 3)
+        self.assertEqual(result["diagnostics"]["count_unit"], "reason_occurrences")
+        self.assertEqual({r["place_id"] for r in result["diagnostics"]["rejections"]}, {"1"})
+        old = {**evidence(), "observed_on": (date.today() - timedelta(days=91)).isoformat()}
+        result = self.call_recommend(records=[menu(atmosphere=[dict(term="조용한", evidence=old)])]).get_json()
+        self.assertEqual(len(result["recommendations"]), 1)
+        self.assertIn("유효기간 초과", result["recommendations"][0]["unknown"][0])
+        self.assertEqual(result["recommendations"][0]["score_breakdown"]["soft_matches"], 2)
+
+    def test_no_menu_no_places_and_invalid_stored_record_are_distinguished(self):
+        c = constraints(walking_minutes_max=None, excluded_ingredients=[], dish_tags=[], atmosphere_tags=[])
+        draft = self.draft(c)
+        with patch.object(rec, "search_candidates", return_value=[place()]):
+            result = self.client.post("/api/recommend", json=self.confirmed_payload(draft)).get_json()
+        self.assertEqual(result["diagnostics"]["rejections"][0]["code"], "menu_missing")
+        self.assertEqual(result["diagnostics"]["rejections"][0]["unit"], "place")
+        with patch.object(rec, "search_candidates", return_value=[]):
+            result = self.client.post("/api/recommend", json=self.confirmed_payload(draft)).get_json()
+        self.assertEqual(result["diagnostics"]["rejections"], [])
+        self.assertIn("장소 후보를 조회하지 못했습니다", result["message"])
+        for raw in ("not json", "null", json.dumps({**menu().model_dump(mode="json"), "menu_name": " "}),
+                    json.dumps({**menu().model_dump(mode="json"), "price_krw": True})):
+            with self.subTest(raw=raw):
+                with db.connect(self.path) as con:
+                    con.execute("INSERT OR REPLACE INTO menu_items VALUES (?, ?, ?)", ("1", "테스트 국밥", raw))
+                with patch.object(rec, "search_candidates", return_value=[place()]):
+                    response = self.client.post("/api/recommend", json=self.confirmed_payload(draft))
+                self.assertEqual(response.status_code, 200)
+                result = response.get_json()
+                self.assertEqual(result["recommendations"], [])
+                self.assertEqual(result["diagnostics"]["rejections"][0]["code"], "menu_invalid")
+
+    def test_rag_expiry_uses_same_structured_reasons_without_duplicate_price_source(self):
+        source = {**evidence(), "observed_on": (date.today() - timedelta(days=91)).isoformat()}
+        result = {"recommendations": [{"id": "1", "menu": {"name": "국밥", "source": source},
+                                      "matches": [{"source": source}], "rank": 1}], "diagnostics": {}}
+        rag.retain_current_evidence(result, constraints())
+        self.assertEqual(result["recommendations"], [])
+        self.assertEqual(result["diagnostics"]["category_counts"]["expired_evidence"], 1)
+        self.assertEqual(result["diagnostics"]["rejections"][0]["code"], "menu_evidence_expired")
 
     def test_numeric_source_units(self):
         self.assertEqual(rec.numeric_value("1만 5천 원 이하", "budget_krw"), 15000)
@@ -415,9 +492,13 @@ class MealFlowTest(TestCase):
         self.assertTrue(rec.checks_for_menu(menu(), constraints(allergens=["땅콩"]))[0])
         record = menu(allergy_checks=[dict(term="땅콩", cross_contact_checked=False, evidence=evidence())])
         self.assertTrue(rec.checks_for_menu(record, constraints(allergens=["땅콩"]))[0])
+        for changes in ({"menu_name": " "}, {"menu_evidence": {**evidence(), "title": " "}},
+                        {"allergy_checks": [dict(term="땅콩", cross_contact_checked="true", evidence=evidence())]}):
+            with self.subTest(changes=changes), self.assertRaises(rec.ValidationError):
+                menu(**changes)
 
     def test_hard_atmosphere_rejects_unknown(self):
-        self.assertIn("필수 특성 '조용한' 미확인", rec.check_preferences(menu(), constraints(hard_fields=["atmosphere_tags"]))[0])
+        self.assertIn("필수 특성 '조용한' 미확인", [f["message"] for f in rec.check_preferences(menu(), constraints(hard_fields=["atmosphere_tags"]))[0]])
 
     def test_diet_requires_exact_fresh_evidence_not_menu_name(self):
         for diet in ("vegan", "vegetarian", "pescatarian"):
@@ -434,7 +515,7 @@ class MealFlowTest(TestCase):
     def test_hard_failure_priority(self):
         c = constraints(allergens=["우유"], dietary_requirements=["vegan"], excluded_foods=["회"])
         failures, _, _ = rec.checks_for_menu(menu(price_krw=20000, absent_ingredients=[]), c)
-        self.assertEqual(failures, ["우유 알레르기·교차접촉 확인 근거 없음", "비건 식단 확인 근거 없음",
+        self.assertEqual([f["message"] for f in failures], ["우유 알레르기·교차접촉 확인 근거 없음", "비건 식단 확인 근거 없음",
                                     "땅콩 미사용 근거 없음", "회 제외 근거 없음", "예산 초과"])
 
     def test_opening_status_requires_current_trusted_record(self):
@@ -468,7 +549,7 @@ class MealFlowTest(TestCase):
         result = self.call_recommend(records=records, c=constraints(open_now=True)).get_json()
         self.assertEqual(result["recommendations"], [])
         self.assertEqual(result["diagnostics"]["rejected"]["현재 영업하지 않음"], 1)
-        self.assertEqual(result["diagnostics"]["rejected"]["현재 영업 여부 미확인"], 2)
+        self.assertEqual(result["diagnostics"]["category_counts"], {"constraint_mismatch": 1, "missing_evidence": 1, "expired_evidence": 1})
 
     def test_newer_closed_and_conflicting_opening_records_fail_closed(self):
         now = datetime.now(timezone.utc)
@@ -508,7 +589,7 @@ class MealFlowTest(TestCase):
             self.weather_ranking.side_effect = slow_weather
             result = self.call_recommend(records=[menu(opening_status=opening)], c=constraints(open_now=True)).get_json()
         self.assertEqual(result["recommendations"], [])
-        self.assertIn("현재 영업 여부 미확인", result["diagnostics"]["rejected"])
+        self.assertIn("영업 확인 기록 만료", result["diagnostics"]["rejected"])
 
     def test_rank_policy_lexicographic_and_missing_weather(self):
         def candidate(id, *, soft=0, complete=.5, age=1, distance=500, category="한식", price=10000):
@@ -588,7 +669,7 @@ class MealFlowTest(TestCase):
     def test_empty_database(self):
         result = self.call_recommend(records=[]).get_json()
         self.assertEqual(result["recommendations"], [])
-        self.assertIn("메뉴 데이터가 아직 없습니다", result["message"])
+        self.assertIn("장소 후보를 조회하지 못했습니다", result["message"])
 
     def test_foreign_session_and_unshown_place_rejected(self):
         result = self.call_recommend().get_json()
@@ -682,6 +763,61 @@ class MealFlowTest(TestCase):
         result = self.call_recommend(c=constraints(unknown_terms=["비건 전용 주방"])).get_json()
         self.assertEqual(result["status"], "clarification_required")
         self.assertEqual(result["recommendations"], [])
+
+    def test_private_unsupported_text_is_not_persisted(self):
+        private_text = "개인 메모 010-0000-0000 집 비밀번호 테스트"
+        result = self.call_recommend(c=constraints(unknown_terms=[private_text])).get_json()
+        self.assertIn(private_text, result["message"], "user can still review their unsupported condition")
+        with db.connect(self.path) as con:
+            raw = con.execute("SELECT snapshot_json FROM recommendation_requests WHERE id=?", (result["request_id"],)).fetchone()[0]
+        self.assertNotIn(private_text, raw)
+        self.assertNotIn("unknown_terms", json.loads(raw)["constraints"])
+        self.assertEqual(json.loads(raw)["unknown_term_count"], 1)
+
+    def test_provider_bad_json_and_coordinates_return_safe_503(self):
+        draft = self.draft(constraints(location_text="강남역"))
+        for data in ([], None, {}, {"documents": None}, {"documents": [None]},
+                     {"documents": [{**place(), "x": "nan"}]},
+                     {"documents": [{**place(), "y": "91"}]},
+                     {"documents": [{**place(), "x": True}]},
+                     {"documents": [{**place(), "id": "bad/id"}]},
+                     {"documents": [place()], "meta": {"is_end": "false"}}):
+            with self.subTest(data=data), patch.dict(os.environ, {"KAKAO_REST_API_KEY": "test-only-private-key"}), \
+                 patch.object(rec.requests, "get") as get:
+                get.return_value.json.return_value = data
+                response = self.client.post("/api/recommend", json=self.confirmed_payload(draft))
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.get_json()["code"], "upstream_unavailable")
+                self.assertNotIn("test-only-private-key", response.get_data(as_text=True))
+        with db.connect(self.path) as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM recommendation_requests").fetchone()[0], 0)
+
+    def test_parser_drafts_use_confirmation_bounds(self):
+        base = constraints(walking_minutes_max=None, budget_krw=None,
+                           excluded_ingredients=[], dish_tags=[], atmosphere_tags=[])
+        for updates, query in (
+            ({"dish_tags": ["국물"] * 2, "source_spans": [{"field": "dish_tags", "text": "국물"}]}, "국물"),
+            ({"location_text": "가" * 201, "source_spans": [{"field": "location_text", "text": "가" * 201}]}, "가" * 201),
+            ({"unknown_terms": ["조건"] * 21}, "조건"),
+            ({"unknown_terms": [""]}, "식당"),
+        ):
+            with self.subTest(updates=updates):
+                self.mock_ollama(json.dumps({**base.model_dump(mode="json"), **updates}))
+                response = self.client.post("/api/constraints", json={"query": query})
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.get_json()["code"], "parse_failed")
+                self.assertNotIn("draft_token", response.get_json())
+                self.assertFalse(rec.PARSER_LOCK.locked())
+
+    def test_missing_map_key_does_not_load_someone_elses_key(self):
+        for configured in (None, ""):
+            with patch.dict(os.environ, {}, clear=False):
+                if configured is None:
+                    os.environ.pop("KAKAO_JAVASCRIPT_KEY", None)
+                else:
+                    os.environ["KAKAO_JAVASCRIPT_KEY"] = configured
+                page = self.client.get("/").get_data(as_text=True)
+                self.assertNotIn("maps/sdk.js", page)
 
     def test_location_choice_is_revalidated(self):
         c = constraints(location_text="강남역")

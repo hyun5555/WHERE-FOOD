@@ -5,7 +5,6 @@ import json
 import math
 import os
 import re
-from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -118,7 +117,7 @@ class EventInput(BaseModel):
 
 
 class Evidence(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     title: str = Field(min_length=1, max_length=200)
     url: HttpUrl
     observed_on: date
@@ -129,13 +128,13 @@ class Evidence(BaseModel):
 
 
 class VerifiedTerm(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     term: str = Field(min_length=1, max_length=50)
     evidence: Evidence
 
 
 class AllergyCheck(VerifiedTerm):
-    cross_contact_checked: bool
+    cross_contact_checked: bool = Field(strict=True)
 
 
 class DietCheck(VerifiedTerm):
@@ -163,11 +162,11 @@ class OpeningStatus(BaseModel):
 
 
 class MenuRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     place_id: str = Field(pattern=r"^[0-9]{1,30}$")
     restaurant_name: str = Field(min_length=1)
     menu_name: str = Field(min_length=1)
-    price_krw: int | None = Field(ge=1, le=1000000)
+    price_krw: int | None = Field(ge=1, le=1000000, strict=True)
     menu_evidence: Evidence
     # Tag/absence claims carry their own sources, not an unrelated homepage link.
     tags: list[VerifiedTerm] = Field(default_factory=list)
@@ -301,6 +300,11 @@ def parse_constraints(query):
         if response.get("done") is not True or response.get("done_reason") != "stop":
             raise ValueError("incomplete generation")
         parsed = MealConstraints.model_validate_json(response["message"]["content"], strict=True)
+        # A draft must already satisfy the same bounds as the user's confirmed edit.
+        ConfirmedConstraints.model_validate(parsed.model_dump(exclude={"source_spans", "unknown_terms"}), strict=True)
+        if (len(parsed.unknown_terms) > 20 or len(set(parsed.unknown_terms)) != len(parsed.unknown_terms)
+                or any(not term.strip() or len(term) > 500 for term in parsed.unknown_terms)):
+            raise ValueError("invalid unsupported terms")
         spans = {s.field: s.text for s in parsed.source_spans}
         if len(spans) != len(parsed.source_spans):
             raise ValueError("duplicate extraction evidence")
@@ -346,8 +350,31 @@ def kakao_get(path, params):
             headers={"Authorization": f"KakaoAK {key}"}, timeout=(3, 5),
         )
         response.raise_for_status()
-        return response.json()
-    except (requests.RequestException, ValueError) as exc:
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError("invalid provider object")
+        if path.startswith("/v2/local/"):
+            docs = data.get("documents")
+            if not isinstance(docs, list) or any(not isinstance(p, dict) for p in docs):
+                raise ValueError("invalid provider documents")
+            if path.startswith("/v2/local/search/"):
+                for place in docs:
+                    if (not isinstance(place.get("id"), str) or not re.fullmatch(r"[0-9]{1,30}", place["id"])
+                            or not isinstance(place.get("place_name"), str) or not place["place_name"].strip()
+                            or not isinstance(place.get("address_name"), str)):
+                        raise ValueError("invalid provider place")
+                    for key, low, high in (("x", -180, 180), ("y", -90, 90)):
+                        value = place[key]
+                        if isinstance(value, bool) or not math.isfinite(float(value)) or not low <= float(value) <= high:
+                            raise ValueError("invalid provider coordinates")
+                meta = data.get("meta", {})
+                if not isinstance(meta, dict) or ("is_end" in meta and not isinstance(meta["is_end"], bool)):
+                    raise ValueError("invalid provider pagination")
+            else:
+                if any(p.get("address") is not None and not isinstance(p["address"], dict) for p in docs):
+                    raise ValueError("invalid provider address")
+        return data
+    except (requests.RequestException, ValueError, KeyError, TypeError, OverflowError) as exc:
         # Never expose exceptions containing URLs, request headers or API keys.
         raise RecommendationError("외부 장소·경로 서비스를 확인하지 못했습니다.") from exc
 
@@ -411,41 +438,90 @@ def walking_route(origin, place):
         return None
 
 
+CATEGORY_LABELS = {"constraint_mismatch": "조건 불충족", "missing_evidence": "근거 부족",
+                   "expired_evidence": "자료 만료"}
+
+
+def rejection(category, field, code, message):
+    return {"category": category, "field": field, "code": code, "message": message}
+
+
+def evidence_problem(sources, field, code, message, max_days=90):
+    """Return a reason only if no usable evidence exists; a future date is not expiry."""
+    if any(s.fresh(max_days) for s in sources):
+        return None
+    expired = any(s.observed_on <= date.today() for s in sources)
+    suffix = "expired" if expired else "invalid_date" if sources else "missing"
+    note = " · 관련 근거 유효기간 초과" if expired else " · 근거 기준일이 미래임" if sources else ""
+    return rejection("expired_evidence" if expired else "missing_evidence", field, code + "_" + suffix, message + note)
+
+
+def record_rejections(diagnostics, failures, place_id=None, menu_name=None):
+    """Count reason occurrences, never misrepresent multiple menu failures as restaurants."""
+    diagnostics["rejection_version"] = "evidence-v1"
+    diagnostics["count_unit"] = "reason_occurrences"
+    details = diagnostics.setdefault("rejections", [])
+    counts = diagnostics.setdefault("category_counts", {key: 0 for key in CATEGORY_LABELS})
+    legacy = diagnostics.setdefault("rejected", {})
+    for failure in failures:
+        details.append({**failure, "place_id": place_id, "menu_name": menu_name,
+                        "unit": "place" if menu_name is None else "menu"})
+        counts[failure["category"]] += 1
+        legacy[failure["message"]] = legacy.get(failure["message"], 0) + 1
+
+
+def opening_problem(opening, now):
+    if opening is None:
+        return rejection("missing_evidence", "open_now", "opening_evidence_missing", "현재 영업 여부 미확인")
+    if not opening.current(now):
+        expired = (opening.valid_until <= now or (date.today() - opening.evidence.observed_on).days > 90)
+        return rejection("expired_evidence" if expired else "missing_evidence", "open_now",
+                         "opening_evidence_expired" if expired else "opening_evidence_invalid_date",
+                         "영업 확인 기록 만료" if expired else "영업 확인 기록의 기준 시각이 미래임")
+    if not opening.is_open:
+        return rejection("constraint_mismatch", "open_now", "closed", "현재 영업하지 않음")
+    return None
+
+
 def checks_for_menu(menu, c, max_age_days=90):
     """Menu hard checks in order: allergy/diet -> exclusions -> evidence/price."""
     failures, matches, unknown = [], [], []
     for term in c.allergens:
         proof = next((p for p in menu.allergy_checks if p.term == term and p.cross_contact_checked and p.evidence.fresh(max_age_days)), None)
         if not proof:
-            failures.append(f"{term} 알레르기·교차접촉 확인 근거 없음")
+            failures.append(evidence_problem([p.evidence for p in menu.allergy_checks if p.term == term and p.cross_contact_checked],
+                            "allergens", "allergy_evidence", f"{term} 알레르기·교차접촉 확인 근거 없음", max_age_days))
         else:
             matches.append({"text": f"{term} 사용·교차접촉 확인 기록 (방문 전 재확인 필요)", "source": proof.evidence.model_dump(mode="json")})
     for term in c.dietary_requirements:
         # Require an explicit record for the requested policy, not inference from a menu name.
         proof = next((p for p in menu.dietary_checks if p.term == term and p.evidence.fresh(max_age_days)), None)
         if not proof:
-            failures.append(f"{DIET_LABELS[term]} 식단 확인 근거 없음")
+            failures.append(evidence_problem([p.evidence for p in menu.dietary_checks if p.term == term],
+                            "dietary_requirements", "diet_evidence", f"{DIET_LABELS[term]} 식단 확인 근거 없음", max_age_days))
         else:
             matches.append({"text": f"{DIET_LABELS[term]} 식단 확인", "source": proof.evidence.model_dump(mode="json")})
     for term in c.excluded_ingredients:
         proof = next((p for p in menu.absent_ingredients if p.term == term and p.evidence.fresh(max_age_days)), None)
         if not proof:
-            failures.append(f"{term} 미사용 근거 없음")
+            failures.append(evidence_problem([p.evidence for p in menu.absent_ingredients if p.term == term],
+                            "excluded_ingredients", "ingredient_absence_evidence", f"{term} 미사용 근거 없음", max_age_days))
         else:
             matches.append({"text": f"{term} 미사용 확인", "source": proof.evidence.model_dump(mode="json")})
     # Excluding a food/flavour also needs explicit absence evidence; missing tags are not proof.
     for term in c.excluded_foods:
         proof = next((p for p in menu.absent_ingredients if p.term == term and p.evidence.fresh(max_age_days)), None)
         if not proof:
-            failures.append(f"{term} 제외 근거 없음")
+            failures.append(evidence_problem([p.evidence for p in menu.absent_ingredients if p.term == term],
+                            "excluded_foods", "food_absence_evidence", f"{term} 제외 근거 없음", max_age_days))
         else:
             matches.append({"text": f"{term} 제외 확인", "source": proof.evidence.model_dump(mode="json")})
     if not menu.menu_evidence.fresh(max_age_days):
-        failures.append("메뉴 근거 재확인 필요")
+        failures.append(evidence_problem([menu.menu_evidence], "menu", "menu_evidence", "메뉴 근거 재확인 필요", max_age_days))
     elif menu.price_krw is None:
-        failures.append("가격 미확인")
+        failures.append(rejection("missing_evidence", "price_krw", "price_missing", "가격 미확인"))
     elif c.budget_krw is not None and menu.price_krw > c.budget_krw:
-        failures.append("예산 초과")
+        failures.append(rejection("constraint_mismatch", "budget_krw", "budget_exceeded", "예산 초과"))
     elif c.budget_krw is not None:
         matches.append({"text": f"메뉴 {menu.price_krw:,}원 · 예산 이내", "source": menu.menu_evidence.model_dump(mode="json")})
     return failures, matches, unknown
@@ -459,9 +535,12 @@ def check_preferences(menu, c, max_age_days=90):
             if proof:
                 matches.append({"text": f"{term} · 출처에 기록된 특성", "source": proof.evidence.model_dump(mode="json"), "soft": field not in c.hard_fields})
             elif field in c.hard_fields:
-                failures.append(f"필수 특성 '{term}' 미확인")
+                failures.append(evidence_problem([p.evidence for p in records if p.term == term], field,
+                                "preference_evidence", f"필수 특성 '{term}' 미확인", max_age_days))
             else:
-                unknown.append(f"'{term}' 여부 미확인")
+                problem = evidence_problem([p.evidence for p in records if p.term == term], field,
+                                           "preference_evidence", f"'{term}' 여부 미확인", max_age_days)
+                unknown.append(problem["message"])
     return failures, matches, unknown
 
 
@@ -530,13 +609,22 @@ def recommend(c, origin, database_path, weather_provider=None):
     places = search_candidates(origin, c, db.catalog_names(database_path))
     by_id = {p["id"]: p for p in places}
     records = db.get_menus(database_path, by_id)
-    rejected, candidates = Counter(), []
+    candidates = []
+    diagnostics = result["diagnostics"]
+    record_rejections(diagnostics, [])
+    recorded_ids = {r.get("place_id") for r in records if isinstance(r, dict)}
+    for place_id in sorted(by_id.keys() - recorded_ids):
+        record_rejections(diagnostics, [rejection("missing_evidence", "menu", "menu_missing",
+                          "장소는 조회됐지만 연결된 메뉴·가격 자료가 없음")], place_id)
     menus = []
     for raw in records:
         try:
             menu = MenuRecord.model_validate(raw)
         except ValidationError:
-            rejected["메뉴 데이터 형식 오류"] += 1
+            record_rejections(diagnostics, [rejection("missing_evidence", "menu", "menu_invalid",
+                              "메뉴 데이터 형식 오류로 근거 확인 불가")],
+                              raw.get("place_id") if isinstance(raw, dict) else None,
+                              raw.get("menu_name") if isinstance(raw, dict) else None)
             continue
         menus.append(menu)
     # Opening status belongs to the place, not an individual menu. Newer closes override old opens.
@@ -553,7 +641,7 @@ def recommend(c, origin, database_path, weather_provider=None):
         menu = menu.model_copy(update={"opening_status": latest_opening.get(menu.place_id)})
         failures, matches, unknown = checks_for_menu(menu, c)
         if failures:
-            rejected.update(failures)
+            record_rejections(diagnostics, failures, menu.place_id, menu.menu_name)
             continue
         place = by_id[menu.place_id]
         try:
@@ -561,10 +649,10 @@ def recommend(c, origin, database_path, weather_provider=None):
             if not math.isfinite(distance) or distance < 0:
                 raise ValueError()
         except (KeyError, TypeError, ValueError):
-            rejected["거리 미확인"] += 1
+            record_rejections(diagnostics, [rejection("missing_evidence", "max_distance_m", "distance_missing", "거리 미확인")], menu.place_id, menu.menu_name)
             continue
         if c.max_distance_m is not None and distance > c.max_distance_m:
-            rejected["거리 초과"] += 1
+            record_rejections(diagnostics, [rejection("constraint_mismatch", "max_distance_m", "distance_exceeded", "거리 초과")], menu.place_id, menu.menu_name)
             continue
         candidates.append({**place, "distance": distance,
                            "menu": {"name": menu.menu_name, "price_krw": menu.price_krw,
@@ -579,9 +667,9 @@ def recommend(c, origin, database_path, weather_provider=None):
         for item in candidates:
             route = routes[item["id"]]
             if route is None:
-                rejected["도보 경로 미확인"] += 1
+                record_rejections(diagnostics, [rejection("missing_evidence", "walking_minutes_max", "route_missing", "도보 경로 미확인")], item["id"], item["menu"]["name"])
             elif route["seconds"] > c.walking_minutes_max * 60:
-                rejected["도보 시간 초과"] += 1
+                record_rejections(diagnostics, [rejection("constraint_mismatch", "walking_minutes_max", "walking_time_exceeded", "도보 시간 초과")], item["id"], item["menu"]["name"])
             else:
                 item["route"] = route
                 eligible.append(item)
@@ -595,16 +683,14 @@ def recommend(c, origin, database_path, weather_provider=None):
         opening = menu.opening_status
         item["opening_status"] = opening.model_dump(mode="json") if opening and opening.current(now) else None
         if c.open_now:
-            if not opening or not opening.current(now):
-                rejected["현재 영업 여부 미확인"] += 1
-                continue
-            if not opening.is_open:
-                rejected["현재 영업하지 않음"] += 1
+            problem = opening_problem(opening, now)
+            if problem:
+                record_rejections(diagnostics, [problem], menu.place_id, menu.menu_name)
                 continue
             item["matches"].append({"text": "현재 영업 중 확인 (기록 유효 시간 내)", "source": opening.evidence.model_dump(mode="json")})
         failures, matches, unknown = check_preferences(menu, c)
         if failures:
-            rejected.update(failures)
+            record_rejections(diagnostics, failures, menu.place_id, menu.menu_name)
             continue
         item["matches"].extend(matches)
         item["unknown"].extend(unknown)
@@ -619,8 +705,7 @@ def recommend(c, origin, database_path, weather_provider=None):
         item["place_source"] = {"title": "카카오 장소 검색", "url": f"https://place.map.kakao.com/{item['id']}",
                                 "observed_at": db.utcnow()}
     result["recommendations"] = candidates[:3]
-    result["diagnostics"] = {"places_searched": len(places), "menus_found": len(records),
-                             "rejected": dict(rejected), "search_radius_m": c.max_distance_m or 2000,
-                             "candidate_limit": 75}
+    diagnostics.update(places_searched=len(places), menus_found=len(records),
+                       search_radius_m=c.max_distance_m or 2000, candidate_limit=75)
     result["notice"] = "검색 범위 내 확보한 데이터 기준입니다. 가격·성분·분위기는 변동될 수 있습니다. 알레르기는 방문 전 식당에 재확인하세요."
     return result

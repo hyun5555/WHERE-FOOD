@@ -77,16 +77,27 @@ def retain_current_evidence(result, constraints):
     """Generation can cross midnight or an opening observation's expiry."""
     kept = []
     for item in result["recommendations"]:
-        sources = [item["menu"]["source"], *(m["source"] for m in item["matches"])]
-        fresh = all(rec.Evidence.model_validate(s).fresh(90) for s in sources)
+        failures = []
+        sources = [("menu", item["menu"]["source"])]
+        for match in item["matches"]:
+            if match["source"] not in [source for _, source in sources]:
+                sources.append(("matched_evidence", match["source"]))
+        for field, source in sources:
+            problem = rec.evidence_problem([rec.Evidence.model_validate(source)], field,
+                                           field + "_evidence", "설명 처리 중 근거 재확인 필요")
+            if problem:
+                failures.append(problem)
         opening = item.get("opening_status")
-        if opening and not rec.OpeningStatus.model_validate(opening).current(datetime.now(timezone.utc)):
+        opening = rec.OpeningStatus.model_validate(opening) if opening else None
+        now = datetime.now(timezone.utc)
+        if constraints.open_now:
+            problem = rec.opening_problem(opening, now)
+            if problem:
+                failures.append(problem)
+        if opening and not opening.current(now):
             item["opening_status"] = None
-        if constraints.open_now and not item.get("opening_status"):
-            fresh = False
-        if not fresh:
-            rejected = result["diagnostics"].setdefault("rejected", {})
-            rejected["설명 처리 중 근거 만료·재확인 필요"] = rejected.get("설명 처리 중 근거 만료·재확인 필요", 0) + 1
+        if failures:
+            rec.record_rejections(result["diagnostics"], failures, item["id"], item["menu"]["name"])
             continue
         item["rank"] = len(kept) + 1
         kept.append(item)

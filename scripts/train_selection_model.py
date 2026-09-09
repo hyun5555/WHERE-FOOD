@@ -13,7 +13,7 @@ from tempfile import TemporaryDirectory, mkdtemp
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-VERSION = "selection-rf-v1"
+VERSION = "selection-rf-v2"
 MIN_REQUESTS = 10  # Execution floor, NOT evidence of statistical significance.
 
 
@@ -66,7 +66,7 @@ def features(item, constraints, created_at):
     }
 
 
-def load_groups(database, as_of):
+def load_groups(database, as_of, include_pending=False):
     """Read a consistent, read-only DB snapshot; never turn unobserved choices into negatives."""
     groups, skipped = [], Counter()
     with closing(sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True)) as con:
@@ -96,6 +96,9 @@ def load_groups(database, as_of):
                 raise ValueError("invalid ranks or duplicate candidates")
             rows = [{"place_id": p["id"], "rule_rank": p["rank"],
                      "features": features(p, snapshot["constraints"], started)} for p in items]
+            group = {"request_id": request_id, "created_at": started, "rows": rows}
+            if include_pending:
+                groups.append(group)  # Split boundaries must not depend on future choices.
             observed = [(kind, pid, timestamp(t)) for kind, pid, t in events.get(request_id, [])]
             observed = [e for e in observed if started <= e[2] < as_of]
             views = [t for kind, _, t in observed if kind == "recommendations_viewed"]
@@ -115,15 +118,17 @@ def load_groups(database, as_of):
                 continue
             for row in rows:
                 row["label"] = int(row["place_id"] == chosen)
-            groups.append({"request_id": request_id, "created_at": started,
-                           "label_at": label_at, "rows": rows})
+            group["label_at"] = label_at
+            if not include_pending:
+                groups.append(group)
         except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
             skipped["invalid_or_unsafe_snapshot"] += 1
     groups.sort(key=lambda g: (g["created_at"], g["request_id"]))
     return groups, {"requests_total": len(requests), "events_total": sum(map(len, events.values())),
                     "selection_events_total": sum(kind == "restaurant_selected"
                                                   for rows in events.values() for kind, _, _ in rows),
-                    "usable_requests": len(groups), "candidate_rows": sum(len(g["rows"]) for g in groups),
+                    "usable_requests": sum("label_at" in g for g in groups),
+                    "candidate_rows": sum(len(g["rows"]) for g in groups if "label_at" in g),
                     "excluded_requests": dict(skipped)}
 
 
@@ -133,8 +138,8 @@ def time_split(groups):
         return [], [], None, 0
     cutoff = groups[int(len(groups) * 0.8)]["created_at"]
     early = [g for g in groups if g["created_at"] < cutoff]
-    train = [g for g in early if g["label_at"] < cutoff]
-    test = [g for g in groups if g["created_at"] >= cutoff]
+    train = [g for g in early if g.get("label_at", cutoff) < cutoff]
+    test = [g for g in groups if g["created_at"] >= cutoff and "label_at" in g]
     return train, test, cutoff, len(early) - len(train)
 
 
@@ -146,19 +151,24 @@ def ranking_metrics(ranks):
 
 def train_compare(database, as_of=None, synthetic=False):
     as_of = as_of or datetime.now(timezone.utc)
-    groups, counts = load_groups(database, as_of)
+    groups, counts = load_groups(database, as_of, include_pending=True)
     train, test, cutoff, purged = time_split(groups)
+    if cutoff:
+        # Reconstruct training labels as they actually existed at the split boundary.
+        # Later rejection/reselection must not remove or relabel an earlier training row.
+        train, _ = load_groups(database, cutoff)
+        purged = sum(g["created_at"] < cutoff for g in groups) - len(train)
     report = {"version": VERSION, "data_kind": "synthetic_demo" if synthetic else "recorded_events",
               "as_of": as_of.isoformat(), "counts": counts, "production_ranking": "rules-v2",
               "scope": "displayed_hard_pass_candidates_only", "status": "insufficient_data",
-              "split": {"method": "request_time_80_20_with_label_cutoff", "train_requests": len(train),
+              "split": {"method": "eligible_snapshot_time_80_20_point_in_time_labels", "train_requests": len(train),
                         "test_requests": len(test), "purged_delayed_labels": purged,
                         "cutoff": cutoff.isoformat() if cutoff else None},
               "limitations": ["선택이 있는 요청의 노출 후보 2~3곳만 비교; 미노출 후보는 학습/평가하지 않음",
                               "노출/위치 편향이 있는 오프라인 평가; 실제 선택률 개선이나 인과 효과가 아님",
                               "선택 확률 점수는 보정되지 않음; 운영 정렬로 자동 적용하지 않음",
                               "최소 10건은 실행 조건일 뿐 성능 검증에 충분한 표본 수가 아님"]}
-    if len(train) < 6 or len(test) < 2:
+    if len(train) + len(test) < MIN_REQUESTS or len(train) < 6 or len(test) < 2:
         report["reason"] = "노출·단일 선택·안전 스냅샷이 있는 요청 10건 이상과 시간 분할 후 학습 6건/평가 2건 이상 필요"
         return report, None
     # Offline-only dependency: the app's startup and recommendation path do not import sklearn.

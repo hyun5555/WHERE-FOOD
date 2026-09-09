@@ -12,6 +12,43 @@ import db
 from scripts import train_selection_model as training
 
 
+class LegacyTrainingTest(TestCase):
+    def test_legacy_features_do_not_depend_on_unknown_target(self):
+        if importlib.util.find_spec("sklearn") is None or importlib.util.find_spec("pandas") is None:
+            self.skipTest("Optional requirements-model.txt not installed")
+        import pandas as pd
+        import RandomForestClassifier as legacy
+        from train_regression_model import load_and_prepare_data_for_regression, train_regression_model
+        from contextlib import redirect_stdout
+        from io import StringIO
+        raw = pd.DataFrame([{
+            "년": 2020, "월": 1, "일": day, "기온값": 10, "습도값": 50,
+            "강수량 값": 0, "풍속값": 1, "기온상태": "선선함", "습도상태": "보통",
+            "강수 유형명": "없음", "바람강도 유형명": "약", "광역시도명": "서울",
+            "시군구명": "강남구", "배달상점 업종명": "한식" if day % 2 else "중식", "주문 건수": day,
+        } for day in range(1, 13)])
+        with patch.object(pd, "read_csv", side_effect=lambda *a, **k: raw.copy()):
+            original, pre, encoder, columns = legacy.load_and_prepare_data("test-only.csv")
+        changed = raw.copy()
+        changed["배달상점 업종명"] = list(reversed(raw["배달상점 업종명"].tolist()))
+        changed["주문 건수"] = 9999
+        with patch.object(pd, "read_csv", side_effect=lambda *a, **k: changed.copy()):
+            altered, _, _, altered_columns = legacy.load_and_prepare_data("test-only.csv")
+        self.assertEqual(columns, altered_columns)
+        self.assertNotIn("배달상점 업종명", columns)
+        self.assertFalse(any(c.startswith("비율_") for c in columns))
+        pd.testing.assert_frame_equal(original[columns], altered[columns])
+        output = StringIO()
+        with redirect_stdout(output):
+            classifier = legacy.train_model(original, pre, columns)
+            self.assertEqual(len(classifier.predict(original[columns])), len(raw))
+            with patch.object(pd, "read_csv", side_effect=lambda *a, **k: raw.copy()):
+                data, pre, columns = load_and_prepare_data_for_regression("test-only.csv")
+            regressor = train_regression_model(data, pre, columns)
+            self.assertEqual(len(regressor.predict(data[columns])), len(raw))
+        self.assertNotIn("최적 MSE", output.getvalue())
+
+
 class SelectionModelTest(TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
@@ -105,6 +142,28 @@ class SelectionModelTest(TestCase):
         self.assertEqual(report["counts"]["candidate_rows"], 0)
         self.assertNotIn("random_forest", report)
         self.assertEqual(report["production_ranking"], "rules-v2")
+
+    def test_future_feedback_cannot_change_training_population(self):
+        if importlib.util.find_spec("sklearn") is None:
+            self.skipTest("Optional requirements-model.txt not installed")
+        before, model_before = training.train_compare(self.path, self.as_of, synthetic=True)
+        cutoff = training.timestamp(before["split"]["cutoff"])
+        request_id, _ = self.first_request()
+        with db.connect(self.path) as con:
+            selected = con.execute("SELECT place_id FROM events WHERE request_id=? AND event_type='restaurant_selected'", (request_id,)).fetchone()[0]
+            con.execute("INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)", (
+                "future-rejection", request_id, "restaurant_rejected", selected, 1,
+                (cutoff + timedelta(seconds=1)).isoformat()))
+            # A test-period unlabeled request must not move the time boundary either.
+            last = con.execute("SELECT id FROM recommendation_requests ORDER BY created_at DESC LIMIT 1").fetchone()[0]
+            con.execute("DELETE FROM events WHERE request_id=? AND event_type='restaurant_selected'", (last,))
+        after, model_after = training.train_compare(self.path, self.as_of, synthetic=True)
+        self.assertEqual(after["split"]["cutoff"], before["split"]["cutoff"])
+        self.assertEqual(after["split"]["train_requests"], 32)
+        self.assertEqual(after["split"]["test_requests"], 7)
+        groups, _ = training.load_groups(self.path, cutoff)
+        x = [row["features"] for g in groups for row in g["rows"]]
+        self.assertEqual(model_before.predict_proba(x).tolist(), model_after.predict_proba(x).tolist())
 
     def test_real_forest_training_scoring_and_trusted_reload(self):
         if importlib.util.find_spec("sklearn") is None:
