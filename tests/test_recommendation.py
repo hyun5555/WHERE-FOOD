@@ -14,7 +14,7 @@ from io import StringIO
 import json
 import os
 
-from app import app, convert_grid, weather_ranking
+from app import app, check_same_origin, convert_grid, weather_ranking
 import db
 import recommendation as rec
 import explanations as rag
@@ -690,6 +690,38 @@ class MealFlowTest(TestCase):
                     self.assertEqual(self.client.post(endpoint, json=value).status_code, 400)
         for endpoint in ("/api/constraints", "/api/recommend"):
             self.assertEqual(self.client.post(endpoint, json={"query": "x"}, headers={"Origin": "https://evil.example"}).status_code, 403)
+
+    def test_demo_logging_preserves_early_origin_rejection(self):
+        from flask import Flask
+        from scripts import run_demo
+
+        demo_app = Flask(__name__)
+        demo_app.testing = True
+        demo_app.before_request(check_same_origin)
+        demo_app.add_url_rule("/api/events", view_func=lambda: ("", 204), methods=["POST"])
+
+        def exercise_requests(**kwargs):
+            client = demo_app.test_client()
+            for endpoint in ("/api/constraints", "/api/recommend", "/api/events"):
+                with self.subTest(endpoint=endpoint):
+                    response = client.post(endpoint, json={}, headers={"Origin": "https://example.invalid"})
+                    self.assertEqual(response.status_code, 403)
+                    self.assertIn("error", response.get_json())
+            self.assertEqual(client.post("/api/events", headers={"Origin": "http://localhost"}).status_code, 204)
+
+        with patch.object(run_demo, "app", demo_app), \
+             patch.object(run_demo, "ROOT", Path(self.temp.name)), \
+             patch.object(run_demo, "import_csv", return_value=0), \
+             patch.object(demo_app, "run", side_effect=exercise_requests), \
+             patch("sys.argv", ["run_demo.py"]), redirect_stdout(StringIO()):
+            run_demo.main()
+
+        output, = (Path(self.temp.name) / "instance/demo").glob("session-*/observations.json")
+        records = json.loads(output.read_text())
+        self.assertEqual([r["http_status"] for r in records], [403, 403, 403, 204])
+        self.assertTrue(all(r["elapsed_ms"] is None for r in records[:3]))
+        self.assertIsInstance(records[-1]["elapsed_ms"], int)
+        self.assertGreaterEqual(records[-1]["elapsed_ms"], 0)
 
     def test_local_parser_ignores_cloud_keys_hosts_and_proxies(self):
         parsed = constraints(location_text="강남역", walking_minutes_max=None, budget_krw=15000,

@@ -35,8 +35,9 @@ def main():
     def record_observation(response):
         if request.path in ("/api/constraints", "/api/recommend", "/api/events"):
             data = response.get_json(silent=True) or {}
+            started = getattr(g, "demo_started", None)
             record = {"endpoint": request.path, "http_status": response.status_code,
-                      "elapsed_ms": round((monotonic() - g.demo_started) * 1000)}
+                      "elapsed_ms": round((monotonic() - started) * 1000) if started is not None else None}
             for key in ("status", "code", "workflow", "rag", "diagnostics", "confirmation"):
                 if key in data:
                     record[key] = data[key]
