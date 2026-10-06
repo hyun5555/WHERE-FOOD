@@ -810,7 +810,7 @@ class MealFlowTest(TestCase):
                 self.assertFalse(rec.PARSER_LOCK.locked())
 
     def test_missing_map_key_does_not_load_someone_elses_key(self):
-        for configured in (None, ""):
+        for configured in (None, "", "  "):
             with patch.dict(os.environ, {}, clear=False):
                 if configured is None:
                     os.environ.pop("KAKAO_JAVASCRIPT_KEY", None)
@@ -818,6 +818,15 @@ class MealFlowTest(TestCase):
                     os.environ["KAKAO_JAVASCRIPT_KEY"] = configured
                 page = self.client.get("/").get_data(as_text=True)
                 self.assertNotIn("maps/sdk.js", page)
+        with patch.dict(os.environ, {"KAKAO_JAVASCRIPT_KEY": "  test-only-js-key  "}):
+            for checking in (False, True):
+                with patch.dict(app.config, {"MAP_CHECK_MODE": checking}):
+                    page = self.client.get("/").get_data(as_text=True)
+                    self.assertIn("appkey=test-only-js-key&libraries=services", page)
+                    self.assertIn('data-map-check="' + str(checking).lower() + '"', page)
+                    self.assertEqual('id="map-check-status"' in page, checking)
+                    section = page.split('id="map-and-list-section"', 1)[1].split('>', 1)[0]
+                    self.assertEqual(" hidden" in section, not checking)
 
     def test_location_choice_is_revalidated(self):
         c = constraints(location_text="강남역")

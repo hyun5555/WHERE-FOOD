@@ -1,8 +1,19 @@
 window.addEventListener('DOMContentLoaded', () => {
-    if (typeof kakao !== 'undefined' && kakao.maps?.services) {
-        initMap();
-    } else {
+    const checkMap = document.getElementById('map-and-list-section').getAttribute('data-map-check') === 'true';
+    try {
+        if (typeof kakao === 'undefined' || !kakao.maps?.services) throw new Error('Map SDK unavailable');
+        initMap(checkMap);
+    } catch {
+        map = ps = undefined;
         document.getElementById('map').textContent = '지도를 불러오지 못했습니다. 식당 목록과 상세 링크를 이용해주세요.';
+        if (checkMap) {
+            document.getElementById('map').setAttribute('data-map-state', 'unavailable');
+            document.getElementById('map-check-status').textContent = '지도 SDK를 표시하지 못했습니다. JavaScript 키·SDK 도메인·카카오맵 사용 설정을 확인해주세요.';
+        }
+    }
+    if (checkMap) {
+        document.getElementById('loading').textContent = '지역 검색으로 공개 장소를 선택해 지도와 기준 마커를 확인해주세요.';
+        return;
     }
     if (!navigator.geolocation) {
         onError();

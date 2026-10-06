@@ -126,7 +126,7 @@
                 <div id="weather-hints"></div>
             </section>
 
-            <section id="map-and-list-section" class="content-section map-list-section" hidden>
+            <section id="map-and-list-section" class="content-section map-list-section" data-map-check="{{ 'true' if map_check else 'false' }}" {% if not map_check %}hidden{% endif %}>
                 <div class="map-column">
                     <div class="section-heading compact">
                         <div>
@@ -134,6 +134,7 @@
                             <h2 id="map-title"><img src="/static/images/map_img.png" id="map-img" alt="">주변 맛집 지도</h2>
                         </div>
                     </div>
+                    {% if map_check %}<p id="map-check-status" class="privacy-note" role="status">실제 지도 타일을 확인하고 있습니다. 이 모드에서는 현재 위치를 자동 요청하지 않습니다.</p>{% endif %}
                     <div id="map" aria-label="주변 맛집 지도"></div>
                 </div>
                 <div class="list-column">
@@ -155,10 +156,10 @@
     <footer>© 날씨와 지역정보를 이용한 지능형 음식 추천 웹 서비스</footer>
 
     <script src="/static/js/state.js?v=3"></script>
-    <script src="/static/js/map.js?v=3"></script>
+    <script src="/static/js/map.js?v=4"></script>
     <script src="/static/js/weather.js?v=4"></script>
     <script src="/static/js/restaurant.js?v=5"></script>
-    <script src="/static/js/recommend.js?v=4"></script>
-    <script src="/static/js/app.js?v=5"></script>
+    <script src="/static/js/recommend.js?v=5"></script>
+    <script src="/static/js/app.js?v=6"></script>
 </body>
 </html>

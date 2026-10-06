@@ -82,7 +82,8 @@ def request_too_large(error):
 @app.get("/")
 def index():
     session_id()
-    return render_template("index.html", kakao_js_key=os.environ.get("KAKAO_JAVASCRIPT_KEY", ""))
+    return render_template("index.html", kakao_js_key=os.environ.get("KAKAO_JAVASCRIPT_KEY", "").strip(),
+                           map_check=app.config.get("MAP_CHECK_MODE", False))
 
 
 @app.get("/api/health")

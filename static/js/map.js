@@ -1,6 +1,6 @@
 //카카오 지도와 마커 관련 함수
 
-function initMap() {
+function initMap(checkMap = false) {
     const mapContainer = document.getElementById('map');
     const mapOption = {
         center: new kakao.maps.LatLng(37.566826, 126.9786567),
@@ -9,6 +9,14 @@ function initMap() {
 
     map = new kakao.maps.Map(mapContainer, mapOption);
     ps = new kakao.maps.services.Places();
+    if (checkMap) {
+        mapContainer.setAttribute('data-map-state', 'waiting-for-tiles');
+        kakao.maps.event.addListener(map, 'tilesloaded', () => {
+            mapContainer.setAttribute('data-map-state', 'tiles-loaded');
+            document.getElementById('map-check-status').textContent = '지도 SDK의 타일 로드 이벤트를 확인했습니다. 실제 지도 표시·확대·이동도 화면에서 확인해주세요.';
+        });
+        map.relayout();
+    }
 }
 
 
