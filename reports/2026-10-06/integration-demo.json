@@ -444,7 +444,7 @@
       "role": "DevOps Automator",
       "responsibility": "remote difference, workflow coverage and CI evidence review",
       "finding": "cached origin/main ahead by one README-only commit; existing push/PR workflow covers required checks",
-      "resolution": "retain existing workflow; integrate origin/main after committing task changes"
+      "resolution": "retained existing workflow; rebased task commit onto origin/main 18a959a before push"
     }
   ],
   "persistent_database_row_counts": {
@@ -495,5 +495,28 @@
     "Three Hyangwon menu sources remain expired; no dates or evidence were fabricated.",
     "The 40-case parser result is reported separately; integration checks do not improve or remeasure extraction accuracy.",
     "Local single-process demo; no production deployment or load benchmark."
-  ]
+  ],
+  "git_verification": {
+    "base_origin_commit": "18a959a3e467e40265d9571e06737df1132b184e",
+    "tested_implementation_commit": "57fcd0c9be1d8c5031cfcb1bab8cfe3f8a2456ef",
+    "branch": "codex/integration-demo-ci",
+    "draft_pr": "https://github.com/hyun5555/WHERE-FOOD/pull/1",
+    "checks": [
+      {
+        "event": "push",
+        "workflow": "Tests",
+        "conclusion": "success",
+        "head_sha": "57fcd0c9be1d8c5031cfcb1bab8cfe3f8a2456ef",
+        "url": "https://github.com/hyun5555/WHERE-FOOD/actions/runs/37396358553"
+      },
+      {
+        "event": "pull_request",
+        "workflow": "Tests",
+        "conclusion": "success",
+        "head_sha": "57fcd0c9be1d8c5031cfcb1bab8cfe3f8a2456ef",
+        "url": "https://github.com/hyun5555/WHERE-FOOD/actions/runs/37396403605"
+      }
+    ],
+    "record_scope": "Implementation commit checked before this documentation-only success record; final branch checks remain visible on the PR."
+  }
 }

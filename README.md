@@ -530,7 +530,7 @@ node test_recommend_flow.js
 
 검증: **백엔드 61개 테스트·JS 검사 통과**, 의존성 검사 통과, 합성 40건 RF v2 학습/비교 실행 완료. 실제 선택 데이터 성능은 여전히 미검증입니다. 기존 `.env`·메뉴 CSV·실제 DB·`model/` 바이너리는 변경하지 않았습니다. 이전에 저장된 스냅샷을 자동 삭제/수정하지 않았고, 현재 DB에서 `unknown_terms`가 비어 있지 않은 과거 기록은 0건이었습니다.
 
-`.github/workflows/tests.yml`에 Python 3.11 + Node 22의 push/PR 검사를 추가했습니다. 기존 모델 의존성까지 설치하여 RF 테스트가 선택 의존성 누락으로 건너뛰어지지 않도록 구성했습니다. 실제 API 키나 Ollama 없이 모의 테스트와 합성 학습을 실행합니다. 9/9 구현 당시에는 로컬 동등 명령만 확인했습니다. 10/6 원격 점검에서 기존 `main` 커밋 `18a959a`의 [Tests 성공](https://github.com/hyun5555/WHERE-FOOD/actions/runs/34670447037)을 확인했습니다. 이는 이번 수정 커밋의 검사 결과와 구분하며, 이번 커밋 결과는 PR의 Tests 검사에서 확인합니다.
+`.github/workflows/tests.yml`에 Python 3.11 + Node 22의 push/PR 검사를 추가했습니다. 기존 모델 의존성까지 설치하여 RF 테스트가 선택 의존성 누락으로 건너뛰어지지 않도록 구성했습니다. 실제 API 키나 Ollama 없이 모의 테스트와 합성 학습을 실행합니다. 9/9 구현 당시에는 로컬 동등 명령만 확인했습니다. **10/6 구현 커밋 `57fcd0c`에서 [push Tests](https://github.com/hyun5555/WHERE-FOOD/actions/runs/37396358553)와 [PR Tests](https://github.com/hyun5555/WHERE-FOOD/actions/runs/37396403605)가 모두 통과**했습니다. 원격 `main`의 README 변경 `18a959a`를 반영한 커밋이며, 최종 브랜치의 검사 상태는 [검토용 PR #1](https://github.com/hyun5555/WHERE-FOOD/pull/1)에서 확인합니다.
 
 채용 담당자에게는 다음 한계도 숨기지 않고 설명해야 합니다.
 
