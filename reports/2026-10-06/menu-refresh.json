@@ -1,0 +1,697 @@
+{
+  "checked_on": "2026-10-06",
+  "status": "partial",
+  "menus_total": 7,
+  "menus_refreshed": 4,
+  "menus_still_expired": 3,
+  "policy_max_age_days": 90,
+  "database_import": {
+    "rows_upserted": 7,
+    "backup_path": "instance/where_food-before-menu-refresh-20261006-093127.db",
+    "counts_before": {
+      "menu_items": 7,
+      "recommendation_requests": 2,
+      "events": 1
+    },
+    "counts_after": {
+      "menu_items": 7,
+      "recommendation_requests": 2,
+      "events": 1
+    },
+    "request_and_event_rows_unchanged": true
+  },
+  "menus": [
+    {
+      "place_id": "16060565",
+      "restaurant_name": "향원",
+      "menu_name": "반계탕",
+      "price_krw": 10000,
+      "previous_observed_on": "2026-06-29",
+      "evidence": {
+        "title": "강남구청 착한가게 · 향원",
+        "url": "https://www.gangnam.go.kr/board/B_000034/1069279/view.do?mid=ID02_010804",
+        "observed_on": "2026-06-29",
+        "excerpt": "반계탕 10000원"
+      },
+      "age_days": 99,
+      "fresh": false
+    },
+    {
+      "place_id": "16060565",
+      "restaurant_name": "향원",
+      "menu_name": "비빔밥",
+      "price_krw": 8000,
+      "previous_observed_on": "2026-06-29",
+      "evidence": {
+        "title": "강남구청 착한가게 · 향원",
+        "url": "https://www.gangnam.go.kr/board/B_000034/1069279/view.do?mid=ID02_010804",
+        "observed_on": "2026-06-29",
+        "excerpt": "비빔밥 8000원"
+      },
+      "age_days": 99,
+      "fresh": false
+    },
+    {
+      "place_id": "16060565",
+      "restaurant_name": "향원",
+      "menu_name": "정식",
+      "price_krw": 8000,
+      "previous_observed_on": "2026-06-29",
+      "evidence": {
+        "title": "강남구청 착한가게 · 향원",
+        "url": "https://www.gangnam.go.kr/board/B_000034/1069279/view.do?mid=ID02_010804",
+        "observed_on": "2026-06-29",
+        "excerpt": "정식 8000원"
+      },
+      "age_days": 99,
+      "fresh": false
+    },
+    {
+      "place_id": "1879763670",
+      "restaurant_name": "장모님밥상",
+      "menu_name": "제육덮밥정식",
+      "price_krw": 10000,
+      "previous_observed_on": "2025-12-18",
+      "evidence": {
+        "title": "매장 메뉴판 사진 · pem43guin 방문기 (2026-08 방문, 월초 기준 / 2026-09-09 게시)",
+        "url": "https://blog.naver.com/pem43guin/224401759131",
+        "observed_on": "2026-08-01",
+        "excerpt": "제육덮밥정식 10000원"
+      },
+      "age_days": 66,
+      "fresh": true
+    },
+    {
+      "place_id": "1879763670",
+      "restaurant_name": "장모님밥상",
+      "menu_name": "차돌된장찌개정식",
+      "price_krw": 10000,
+      "previous_observed_on": "2025-12-18",
+      "evidence": {
+        "title": "매장 메뉴판 사진 · pem43guin 방문기 (2026-08 방문, 월초 기준 / 2026-09-09 게시)",
+        "url": "https://blog.naver.com/pem43guin/224401759131",
+        "observed_on": "2026-08-01",
+        "excerpt": "차돌된장찌개정식 10000원"
+      },
+      "age_days": 66,
+      "fresh": true
+    },
+    {
+      "place_id": "273280172",
+      "restaurant_name": "사누키제면소",
+      "menu_name": "자루우동",
+      "price_krw": 7000,
+      "previous_observed_on": "2026-06-29",
+      "evidence": {
+        "title": "매장 메뉴판 사진 · BOTA 방문기 (2026-09-17 게시)",
+        "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064",
+        "observed_on": "2026-09-17",
+        "excerpt": "자루우동 7000원"
+      },
+      "age_days": 19,
+      "fresh": true
+    },
+    {
+      "place_id": "273280172",
+      "restaurant_name": "사누키제면소",
+      "menu_name": "카케우동",
+      "price_krw": 7000,
+      "previous_observed_on": "2026-06-29",
+      "evidence": {
+        "title": "매장 메뉴판 사진 · BOTA 방문기 (2026-09-17 게시)",
+        "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064",
+        "observed_on": "2026-09-17",
+        "excerpt": "카케우동 7000원"
+      },
+      "age_days": 19,
+      "fresh": true
+    }
+  ],
+  "accepted_sources": [
+    {
+      "restaurant": "사누키제면소",
+      "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064",
+      "published_on": "2026-09-17",
+      "evidence_type": "방문자가 촬영한 실물 매장 메뉴판 사진 직접 대조",
+      "date_basis": "정확한 방문일은 미확인; 출처 게시일을 사용",
+      "prices": {
+        "카케우동": 7000,
+        "자루우동": 7000
+      }
+    },
+    {
+      "restaurant": "장모님밥상",
+      "url": "https://blog.naver.com/pem43guin/224401759131",
+      "published_on": "2026-09-09",
+      "visit_month": "2026-08",
+      "evidence_type": "방문 인증 2026.08 영수증 표기와 실물 매장 입구 메뉴판 사진 직접 대조",
+      "date_basis": "정확한 방문일 미확인; 8월 방문의 가장 이른 날짜 2026-08-01을 보수적인 유효기간 기준으로 사용. 실제 8월 1일 방문을 확인한 것은 아님",
+      "prices": {
+        "제육덮밥정식": 10000,
+        "차돌된장찌개정식": 10000
+      }
+    }
+  ],
+  "rejected_sources": [
+    {
+      "restaurant": "사누키제면소",
+      "url": "https://www.gangnam.go.kr/board/B_000034/1069280/view.do?mid=ID02_010804",
+      "reason": "기준일 2026-06-29 그대로; 99일 경과"
+    },
+    {
+      "restaurant": "향원",
+      "url": "https://www.gangnam.go.kr/board/B_000034/1069279/view.do?mid=ID02_010804",
+      "reason": "기준일 2026-06-29 그대로; 99일 경과"
+    },
+    {
+      "restaurant": "장모님밥상",
+      "url": "https://www.gangnam.go.kr/board/B_000034/1069271/view.do?mid=ID02_010804",
+      "reason": "기준일 2025-12-18 그대로; 292일 경과"
+    },
+    {
+      "restaurant": "사누키제면소",
+      "url": "https://pcmap.place.naver.com/restaurant/1136171352/menu/list",
+      "reason": "최근 수정일 2025-12-03으로 90일 초과"
+    },
+    {
+      "restaurant": "장모님밥상",
+      "url": "https://pcmap.place.naver.com/restaurant/1756553999/menu/list",
+      "reason": "최근 수정일 2026-03-06으로 90일 초과"
+    },
+    {
+      "restaurant": "향원",
+      "url": "https://pcmap.place.naver.com/restaurant/1848500035/menu/list",
+      "reason": "메뉴 가격 9000/7000원 표기는 6월 공식 자료 10000/8000원과 상충; 수정일 미확인"
+    },
+    {
+      "restaurant": "향원",
+      "url": "https://pcmap.place.naver.com/restaurant/1848500035/review/visitor?reviewSort=recent",
+      "reason": "최근 방문 2026-09-02/08-25/07-24 리뷰는 정확한 메뉴 가격 없음; 9월 사진 2장은 음식 사진"
+    },
+    {
+      "restaurant": "향원",
+      "url": "https://www.diningcode.com/profile.php?rid=yAnwneuZr43j",
+      "reason": "메뉴 갱신일 미확인, 연결 방문기 최신 게시일 2025-07-25"
+    }
+  ],
+  "remaining": [
+    {
+      "restaurant": "향원",
+      "menus": [
+        "반계탕",
+        "정식",
+        "비빔밥"
+      ],
+      "needed": "2026-07-08 이후 실제 날짜가 확인되는 메뉴판 또는 매장 가격 확인 기록",
+      "action": "기존 가격·기준일 유지, 자료 만료로 추천에서 제외"
+    }
+  ],
+  "limits": [
+    "2026-10-06 매장 직접 확인·전화 확인을 수행한 것은 아님",
+    "공식 최신 메뉴 대신 최근 방문기의 실물 메뉴판 사진을 사용",
+    "성분·알레르기·식단·분위기·현재 영업 여부는 이 가격 자료로 추정하지 않음"
+  ],
+  "recommendation_validation": {
+    "started_at": "2026-10-06T00:33:05.553131+00:00",
+    "method": "Flask test_client에서 실제 요청 처리 경로 실행; 실제 로컬 Qwen·카카오 API 사용, 모의 응답 없음",
+    "database": "갱신 CSV를 가져온 임시 DB; 실제 사용자 요청/행동 기록 추가 없음",
+    "query": "강남역에서 15000원 이하로 추천해줘",
+    "observations": [
+      {
+        "case": "parse",
+        "endpoint": "/api/constraints",
+        "http_status": 200,
+        "seconds": 6.242,
+        "status": "review_required",
+        "parser": {
+          "model": "qwen3.5:9b",
+          "provider": "ollama",
+          "version": "qwen3.5-9b-v2"
+        },
+        "budget_krw": 15000,
+        "recommendations": []
+      },
+      {
+        "case": "location_review",
+        "endpoint": "/api/recommend",
+        "http_status": 200,
+        "seconds": 0.078,
+        "status": "clarification_required",
+        "workflow": {
+          "engine": "langgraph",
+          "steps": [
+            "RESOLVE",
+            "CLARIFY"
+          ],
+          "version": "meal-v2"
+        },
+        "diagnostics": {},
+        "confirmation": {
+          "confirmed_at": "2026-10-06T00:33:11.876531+00:00",
+          "edited_fields": [],
+          "ignored_unknown_count": 0,
+          "source": "user_confirmed"
+        },
+        "parser": {
+          "model": "qwen3.5:9b",
+          "provider": "ollama",
+          "version": "qwen3.5-9b-v2"
+        },
+        "budget_krw": 15000,
+        "recommendations": []
+      },
+      {
+        "case": "normal_recommendation",
+        "endpoint": "/api/recommend",
+        "http_status": 200,
+        "seconds": 14.655,
+        "status": "partial",
+        "workflow": {
+          "engine": "langgraph",
+          "steps": [
+            "RESOLVE",
+            "SEARCH_FILTER_RANK",
+            "EXPLAIN",
+            "RESPOND"
+          ],
+          "version": "meal-v2"
+        },
+        "rag": {
+          "attempted": true,
+          "duration_ms": 12831,
+          "evidence_count": 4,
+          "fallback_reason": null,
+          "method": "qwen_grounded",
+          "model": "qwen3.5:9b",
+          "retrieval": "kakao_candidates_then_sql_menu_evidence",
+          "version": "sql-extractive-v1"
+        },
+        "diagnostics": {
+          "candidate_limit": 75,
+          "category_counts": {
+            "constraint_mismatch": 0,
+            "expired_evidence": 3,
+            "missing_evidence": 45
+          },
+          "count_unit": "reason_occurrences",
+          "menus_found": 7,
+          "places_searched": 48,
+          "rejected": {
+            "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과": 3,
+            "장소는 조회됐지만 연결된 메뉴·가격 자료가 없음": 45
+          },
+          "rejection_version": "evidence-v1",
+          "search_radius_m": 2000,
+          "catalog_rejections": [
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "반계탕",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "비빔밥",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "정식",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            }
+          ],
+          "export_note": "전체 사유 집계는 유지; 상세 사유는 기존 카탈로그 3곳만 수록"
+        },
+        "confirmation": {
+          "confirmed_at": "2026-10-06T00:33:26.531415+00:00",
+          "edited_fields": [],
+          "ignored_unknown_count": 0,
+          "source": "user_confirmed"
+        },
+        "parser": {
+          "model": "qwen3.5:9b",
+          "provider": "ollama",
+          "version": "qwen3.5-9b-v2"
+        },
+        "budget_krw": 15000,
+        "recommendations": [
+          {
+            "name": "사누키제면소",
+            "rank": 1,
+            "menu": {
+              "name": "자루우동",
+              "price_krw": 7000,
+              "source": {
+                "excerpt": "자루우동 7000원",
+                "observed_on": "2026-09-17",
+                "title": "매장 메뉴판 사진 · BOTA 방문기 (2026-09-17 게시)",
+                "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064"
+              }
+            },
+            "explanation_method": "qwen_grounded"
+          },
+          {
+            "name": "장모님밥상",
+            "rank": 2,
+            "menu": {
+              "name": "제육덮밥정식",
+              "price_krw": 10000,
+              "source": {
+                "excerpt": "제육덮밥정식 10000원",
+                "observed_on": "2026-08-01",
+                "title": "매장 메뉴판 사진 · pem43guin 방문기 (2026-08 방문, 월초 기준 / 2026-09-09 게시)",
+                "url": "https://blog.naver.com/pem43guin/224401759131"
+              }
+            },
+            "explanation_method": "qwen_grounded"
+          }
+        ]
+      },
+      {
+        "case": "confirmed_budget_6000",
+        "endpoint": "/api/recommend",
+        "http_status": 200,
+        "seconds": 0.385,
+        "status": "no_results",
+        "workflow": {
+          "engine": "langgraph",
+          "steps": [
+            "RESOLVE",
+            "SEARCH_FILTER_RANK",
+            "NO_RESULTS"
+          ],
+          "version": "meal-v2"
+        },
+        "diagnostics": {
+          "candidate_limit": 75,
+          "category_counts": {
+            "constraint_mismatch": 4,
+            "expired_evidence": 3,
+            "missing_evidence": 45
+          },
+          "count_unit": "reason_occurrences",
+          "menus_found": 7,
+          "places_searched": 48,
+          "rejected": {
+            "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과": 3,
+            "예산 초과": 4,
+            "장소는 조회됐지만 연결된 메뉴·가격 자료가 없음": 45
+          },
+          "rejection_version": "evidence-v1",
+          "search_radius_m": 2000,
+          "catalog_rejections": [
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "반계탕",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "비빔밥",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "정식",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "constraint_mismatch",
+              "code": "budget_exceeded",
+              "field": "budget_krw",
+              "menu_name": "제육덮밥정식",
+              "message": "예산 초과",
+              "place_id": "1879763670",
+              "unit": "menu"
+            },
+            {
+              "category": "constraint_mismatch",
+              "code": "budget_exceeded",
+              "field": "budget_krw",
+              "menu_name": "차돌된장찌개정식",
+              "message": "예산 초과",
+              "place_id": "1879763670",
+              "unit": "menu"
+            },
+            {
+              "category": "constraint_mismatch",
+              "code": "budget_exceeded",
+              "field": "budget_krw",
+              "menu_name": "자루우동",
+              "message": "예산 초과",
+              "place_id": "273280172",
+              "unit": "menu"
+            },
+            {
+              "category": "constraint_mismatch",
+              "code": "budget_exceeded",
+              "field": "budget_krw",
+              "menu_name": "카케우동",
+              "message": "예산 초과",
+              "place_id": "273280172",
+              "unit": "menu"
+            }
+          ],
+          "export_note": "전체 사유 집계는 유지; 상세 사유는 기존 카탈로그 3곳만 수록"
+        },
+        "confirmation": {
+          "confirmed_at": "2026-10-06T00:33:26.916675+00:00",
+          "edited_fields": [
+            "budget_krw"
+          ],
+          "ignored_unknown_count": 0,
+          "source": "user_confirmed"
+        },
+        "parser": {
+          "model": "qwen3.5:9b",
+          "provider": "ollama",
+          "version": "qwen3.5-9b-v2"
+        },
+        "budget_krw": 6000,
+        "recommendations": []
+      },
+      {
+        "case": "synthetic_peanut_allergy",
+        "endpoint": "/api/recommend",
+        "http_status": 200,
+        "seconds": 0.453,
+        "status": "no_results",
+        "workflow": {
+          "engine": "langgraph",
+          "steps": [
+            "RESOLVE",
+            "SEARCH_FILTER_RANK",
+            "NO_RESULTS"
+          ],
+          "version": "meal-v2"
+        },
+        "diagnostics": {
+          "candidate_limit": 75,
+          "category_counts": {
+            "constraint_mismatch": 0,
+            "expired_evidence": 3,
+            "missing_evidence": 52
+          },
+          "count_unit": "reason_occurrences",
+          "menus_found": 7,
+          "places_searched": 48,
+          "rejected": {
+            "땅콩 알레르기·교차접촉 확인 근거 없음": 7,
+            "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과": 3,
+            "장소는 조회됐지만 연결된 메뉴·가격 자료가 없음": 45
+          },
+          "rejection_version": "evidence-v1",
+          "search_radius_m": 2000,
+          "catalog_rejections": [
+            {
+              "category": "missing_evidence",
+              "code": "allergy_evidence_missing",
+              "field": "allergens",
+              "menu_name": "반계탕",
+              "message": "땅콩 알레르기·교차접촉 확인 근거 없음",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "반계탕",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "missing_evidence",
+              "code": "allergy_evidence_missing",
+              "field": "allergens",
+              "menu_name": "비빔밥",
+              "message": "땅콩 알레르기·교차접촉 확인 근거 없음",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "비빔밥",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "missing_evidence",
+              "code": "allergy_evidence_missing",
+              "field": "allergens",
+              "menu_name": "정식",
+              "message": "땅콩 알레르기·교차접촉 확인 근거 없음",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "expired_evidence",
+              "code": "menu_evidence_expired",
+              "field": "menu",
+              "menu_name": "정식",
+              "message": "메뉴 근거 재확인 필요 · 관련 근거 유효기간 초과",
+              "place_id": "16060565",
+              "unit": "menu"
+            },
+            {
+              "category": "missing_evidence",
+              "code": "allergy_evidence_missing",
+              "field": "allergens",
+              "menu_name": "제육덮밥정식",
+              "message": "땅콩 알레르기·교차접촉 확인 근거 없음",
+              "place_id": "1879763670",
+              "unit": "menu"
+            },
+            {
+              "category": "missing_evidence",
+              "code": "allergy_evidence_missing",
+              "field": "allergens",
+              "menu_name": "차돌된장찌개정식",
+              "message": "땅콩 알레르기·교차접촉 확인 근거 없음",
+              "place_id": "1879763670",
+              "unit": "menu"
+            },
+            {
+              "category": "missing_evidence",
+              "code": "allergy_evidence_missing",
+              "field": "allergens",
+              "menu_name": "자루우동",
+              "message": "땅콩 알레르기·교차접촉 확인 근거 없음",
+              "place_id": "273280172",
+              "unit": "menu"
+            },
+            {
+              "category": "missing_evidence",
+              "code": "allergy_evidence_missing",
+              "field": "allergens",
+              "menu_name": "카케우동",
+              "message": "땅콩 알레르기·교차접촉 확인 근거 없음",
+              "place_id": "273280172",
+              "unit": "menu"
+            }
+          ],
+          "export_note": "전체 사유 집계는 유지; 상세 사유는 기존 카탈로그 3곳만 수록"
+        },
+        "confirmation": {
+          "confirmed_at": "2026-10-06T00:33:27.373303+00:00",
+          "edited_fields": [
+            "allergens"
+          ],
+          "ignored_unknown_count": 0,
+          "source": "user_confirmed"
+        },
+        "parser": {
+          "model": "qwen3.5:9b",
+          "provider": "ollama",
+          "version": "qwen3.5-9b-v2"
+        },
+        "budget_krw": 15000,
+        "recommendations": []
+      }
+    ],
+    "passed": true,
+    "selected_public_place": "강남역 2호선",
+    "finished_at": "2026-10-06T00:33:27.375871+00:00",
+    "temporary_ollama_server_stopped_after_check": true
+  },
+  "recommendation_validation_initial_attempt": {
+    "observations": [
+      {
+        "case": "parse",
+        "endpoint": "/api/constraints",
+        "http_status": 200,
+        "seconds": 8.859,
+        "status": "review_required",
+        "parser": {
+          "model": "qwen3.5:9b",
+          "provider": "ollama",
+          "version": "qwen3.5-9b-v2"
+        },
+        "budget_krw": 15000,
+        "recommendations": []
+      },
+      {
+        "case": "location_review",
+        "endpoint": "/api/recommend",
+        "http_status": 200,
+        "seconds": 0.111,
+        "status": "clarification_required",
+        "workflow": {
+          "engine": "langgraph",
+          "steps": [
+            "RESOLVE",
+            "CLARIFY"
+          ],
+          "version": "meal-v2"
+        },
+        "diagnostics": {},
+        "confirmation": {
+          "confirmed_at": "2026-10-06T00:32:26.740714+00:00",
+          "edited_fields": [],
+          "ignored_unknown_count": 0,
+          "source": "user_confirmed"
+        },
+        "parser": {
+          "model": "qwen3.5:9b",
+          "provider": "ollama",
+          "version": "qwen3.5-9b-v2"
+        },
+        "budget_krw": 15000,
+        "recommendations": []
+      }
+    ],
+    "stopped_reason": "검증용 코드가 장소 선택지 name 필드를 place_name으로 잘못 읽어 중단. 앱 오류 아님; 아래 재실행에서 수정"
+  },
+  "verification": {
+    "python_tests_passed": 66,
+    "js_flow_test_passed": true,
+    "diff_whitespace_check_passed": true
+  }
+}

@@ -21,9 +21,10 @@ class Element {
     replaceChildren(...children) { this.children = children; }
     addEventListener(type, fn) { this.handlers[type] = fn; }
     setAttribute(name, value) { this.attributes[name] = value; }
+    getAttribute(name) { return this.attributes[name] ?? null; }
     removeAttribute(name) { delete this.attributes[name]; delete this[name]; }
     focus() {}
-    scrollIntoView() {}
+    scrollIntoView(options) { this.scrolled = options; }
     reportValidity() { return true; } // Native validation is also checked in the real browser.
     set id(value) { this._id = value; elements.set(value, this); }
     get id() { return this._id; }
@@ -37,16 +38,19 @@ const get = id => {
 };
 const requests = [];
 const pending = [];
+const startup = {};
 const context = vm.createContext({
+    window: {addEventListener: (event, callback) => startup[event] = callback},
+    navigator: {geolocation: {getCurrentPosition: (success, failure) => { startup.gps = success; startup.gpsError = failure; startup.gpsCalls = (startup.gpsCalls || 0) + 1; }}},
     document: {getElementById: get, createElement: tag => new Element(tag)},
-    URL, AbortController, crypto: {randomUUID}, removeMarkers() {},
+    URL, AbortController, crypto: {randomUUID},
     fetch: (url, options) => {
         requests.push({url, ...options, json: JSON.parse(options.body)});
         if (url === '/api/events') return Promise.resolve({ok: true});
         return new Promise(resolve => pending.push(resolve));
     }
 });
-for (const file of ['state', 'weather', 'restaurant', 'recommend']) {
+for (const file of ['state', 'map', 'weather', 'restaurant', 'recommend', 'app']) {
     vm.runInContext(fs.readFileSync('static/js/' + file + '.js', 'utf8'), context);
 }
 const run = code => vm.runInContext(code, context);
@@ -241,5 +245,109 @@ const finish = async (promise, data, ok = true) => {
     assert(descendants(get('location-options')).some(n => n.textContent.includes('알레르기는 근거 없이 통과시키지 않습니다')));
     run('invalidateRecommendations()');
     assert.equal(get('location-options').children.length, 0, 'old diagnostics clear on edit');
-    console.log('PASS: weather observations, parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, evidence diagnostics, XSS');
+    // Real app.js callbacks: latest location intent beats old SDK results AND startup GPS.
+    startup.DOMContentLoaded(); // Missing map SDK is allowed; captures the GPS callbacks.
+    context.kakao = {maps: {services: {Status: {OK: 'OK'}}}};
+    const locationCallbacks = [];
+    context.locationCallbacks = locationCallbacks;
+    run('ps = {keywordSearch: (query, callback) => locationCallbacks.push({query, callback})}');
+    get('location-search-input').value = '이전 장소';
+    run('searchLocation()');
+    get('location-search-input').value = '최신 장소';
+    run('searchLocation()');
+    locationCallbacks[1].callback([{x: 127, y: 37.5}], 'OK');
+    assert.equal(run('userPosition.lat'), 37.5);
+    const countAfterLatest = requests.length;
+    locationCallbacks[0].callback([{x: 126, y: 35}], 'OK');
+    locationCallbacks[0].callback([], 'ERROR');
+    startup.gps({coords: {latitude: 34, longitude: 125}});
+    startup.gpsError();
+    assert.equal(run('userPosition.lat'), 37.5);
+    assert.equal(requests.length, countAfterLatest, 'stale SDK/GPS callbacks cannot start weather requests');
+    assert(get('loading').textContent.includes('날씨를 확인하고'), 'late GPS error must not overwrite status');
+    const oldWeather = pending.shift();
+    get('location-search-input').value = '여러 장소';
+    run('searchLocation()');
+    locationCallbacks.at(-1).callback([{x: 128, y: 38, place_name: '후보 A', address_name: 'A'},
+                                     {x: 129, y: 36, place_name: '후보 B', address_name: 'B'}], 'OK');
+    const staleChoice = get('location-options').children[0];
+    get('location-search-input').value = '다음 검색';
+    run('searchLocation()');
+    staleChoice.handlers.click();
+    assert.equal(run('userPosition'), null, 'new location intent clears the old origin until selection');
+    context.locationDraft = {...draft, unknown_terms: []};
+    run('constraintDraft = locationDraft; renderConstraintEditor(constraintDraft)');
+    get('edit-location_text').value = '';
+    get('confirm-conditions').checked = true;
+    const waitingForLocation = run('submitRecommendation()');
+    assert.equal(requests.at(-1).json.lat, null, 'pending location search cannot send old latitude');
+    assert.equal(requests.at(-1).json.lon, null, 'pending location search cannot send old longitude');
+    await finish(waitingForLocation, {...result, status: 'clarification_required', recommendations: []});
+    oldWeather({ok: true, json: async () => ({weather: {temp: -99}, location: {name: 'stale'}, recommendations: []})});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.notEqual(get('temperature').textContent, '-99°C');
+    run('ps = undefined');
+    get('location-search-input').value = '강남역';
+    run('searchLocation()');
+    assert.equal(get('meal-query').value, '강남역에서 식당 추천해줘', 'SDK failure still supports textual location');
+    // Real map.js with a controlled SDK: these checks do not prove live tiles/domain authorization.
+    const mapCalls = [];
+    class LatLng {
+        constructor(lat, lon) { this.lat = Number(lat); this.lon = Number(lon); }
+        getLat() { return this.lat; }
+        getLng() { return this.lon; }
+    }
+    class MapStub {
+        relayout() { mapCalls.push('relayout'); }
+        setCenter(position) { this.center = position; }
+        setBounds(bounds) { this.bounds = bounds; mapCalls.push('bounds'); }
+    }
+    class Marker {
+        constructor(options) { this.options = options; this.position = options.position; }
+        setMap(map) { this.map = map; }
+        getPosition() { return this.position; }
+        setPosition(position) { this.position = position; }
+    }
+    context.kakao = {maps: {Map: MapStub, LatLng, Marker, Size: class {}, Point: class {}, MarkerImage: class {},
+        LatLngBounds: class { constructor() { this.positions = []; } extend(position) { this.positions.push(position); } },
+        services: {Places: class {}, Status: {OK: 'OK'}},
+        event: {addListener: (target, name, callback) => { (target.handlers ||= {})[name] = callback; }}}};
+    get('map-and-list-section').setAttribute('data-map-check', 'true');
+    const gpsCalls = startup.gpsCalls;
+    startup.DOMContentLoaded();
+    assert.equal(startup.gpsCalls, gpsCalls, 'map check does not request private GPS location');
+    assert.equal(get('map').getAttribute('data-map-state'), 'waiting-for-tiles');
+    run('map.handlers.tilesloaded()');
+    assert.equal(get('map').getAttribute('data-map-state'), 'tiles-loaded');
+    context.mapResult = {...result, origin: {name: '공개 테스트 장소', lat: 37.5, lon: 127},
+        recommendations: result.recommendations.map(p => ({...p, x: '127.01', y: '37.51'}))};
+    mapCalls.length = 0;
+    run('invalidateRecommendations(); renderDecisionResults(mapResult)');
+    assert.equal(get('map-and-list-section').hidden, false);
+    assert.equal(run('markers.length'), 1);
+    assert.deepEqual(mapCalls, ['relayout', 'bounds'], 'visible map relayout precedes recommendation bounds');
+    const main = run('mainMarker');
+    const previousRestaurantMarker = run('markers[0]');
+    run('renderDecisionResults(mapResult)');
+    assert.equal(run('mainMarker'), main, 'main marker is reused');
+    assert.equal(previousRestaurantMarker.map, null, 'old restaurant markers are removed');
+    assert.equal(run('markers.length'), 1, 'new results do not accumulate markers');
+    run('markers[0].handlers.click()');
+    assert.equal(get('place-1').scrolled.block, 'center', 'marker click targets the matching restaurant card');
+    main.position = new LatLng(37.52, 127.02);
+    main.handlers.dragend();
+    assert.equal(requests.at(-1).json.lat, 37.52, 'dragging selects the new search origin');
+    assert.equal(get('map-and-list-section').hidden, false, 'map check remains visible when results are invalidated');
+    await finish(Promise.resolve(), {weather: {temp: 24, humidity: 50, wind_speed: 1}, location: {name: '테스트'}, recommendations: []});
+    await new Promise(resolve => setImmediate(resolve));
+    context.kakao.maps.Map = class { constructor() { throw new Error('SDK initialization failure'); } };
+    startup.DOMContentLoaded();
+    assert.equal(run('map'), undefined);
+    assert.equal(run('ps'), undefined);
+    assert.equal(get('map').getAttribute('data-map-state'), 'unavailable');
+    assert(get('map-check-status').textContent.includes('SDK 도메인'));
+    get('map-and-list-section').setAttribute('data-map-check', 'false');
+    run('invalidateRecommendations()');
+    assert.equal(get('map-and-list-section').hidden, true, 'normal mode still clears old results');
+    console.log('PASS: weather observations, parse/review/search, map/marker callbacks, explicit confirmation, location/GPS ordering, stale responses, expiry, feedback, evidence diagnostics, XSS');
 })().catch(error => { console.error(error); process.exitCode = 1; });
