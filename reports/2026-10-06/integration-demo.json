@@ -1,0 +1,499 @@
+{
+  "checked_on": "2026-10-06",
+  "timezone": "Asia/Seoul",
+  "execution": {
+    "method": "real_browser_against_isolated_flask_app",
+    "url": "http://127.0.0.1:8001/",
+    "location": "public Gangnam station, Line 2",
+    "gps_permission_granted": false,
+    "external_services": [
+      "Kakao Local API",
+      "KMA weather observation API"
+    ],
+    "local_model": "qwen3.5:9b",
+    "ollama_version": "0.33.0",
+    "menu_input": "data/menu_items.csv",
+    "menu_count": 7,
+    "fresh_menu_count": 4,
+    "expired_menu_count": 3,
+    "latency_scope": "server request processing, one observation per scenario; not p50/p95 or browser rendering latency",
+    "raw_observation_path": "instance/demo/session-vrrkxe6e/observations.json"
+  },
+  "cases": [
+    {
+      "name": "parse",
+      "endpoint": "/api/constraints",
+      "http_status": 200,
+      "elapsed_ms": 14154,
+      "status": "review_required",
+      "budget_krw": 15000
+    },
+    {
+      "name": "location_choice",
+      "endpoint": "/api/recommend",
+      "http_status": 200,
+      "elapsed_ms": 92,
+      "status": "clarification_required",
+      "budget_krw": 15000,
+      "workflow": {
+        "engine": "langgraph",
+        "steps": [
+          "RESOLVE",
+          "CLARIFY"
+        ],
+        "version": "meal-v2"
+      },
+      "edited_fields": [],
+      "recommendations": []
+    },
+    {
+      "name": "normal",
+      "endpoint": "/api/recommend",
+      "http_status": 200,
+      "elapsed_ms": 14113,
+      "status": "partial",
+      "budget_krw": 15000,
+      "workflow": {
+        "engine": "langgraph",
+        "steps": [
+          "RESOLVE",
+          "SEARCH_FILTER_RANK",
+          "EXPLAIN",
+          "RESPOND"
+        ],
+        "version": "meal-v2"
+      },
+      "rag": {
+        "attempted": true,
+        "duration_ms": 12252,
+        "evidence_count": 4,
+        "fallback_reason": null,
+        "method": "qwen_grounded",
+        "model": "qwen3.5:9b",
+        "retrieval": "kakao_candidates_then_sql_menu_evidence",
+        "version": "sql-extractive-v1"
+      },
+      "edited_fields": [],
+      "diagnostic_counts": {
+        "constraint_mismatch": 0,
+        "expired_evidence": 3,
+        "missing_evidence": 45
+      },
+      "recommendations": [
+        {
+          "name": "사누키제면소",
+          "rank": 1,
+          "menu": {
+            "name": "자루우동",
+            "price_krw": 7000,
+            "source": {
+              "excerpt": "자루우동 7000원",
+              "observed_on": "2026-09-17",
+              "title": "매장 메뉴판 사진 · BOTA 방문기 (2026-09-17 게시)",
+              "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064"
+            }
+          },
+          "score_breakdown": {
+            "evidence_age_days": 19,
+            "evidence_completeness": 0.142857,
+            "hard_constraints": "pass",
+            "soft_matches": 0,
+            "weather_applied": true,
+            "weather_category": "돈까스/일식",
+            "weather_score": 0.567
+          },
+          "explanation_method": "qwen_grounded"
+        },
+        {
+          "name": "장모님밥상",
+          "rank": 2,
+          "menu": {
+            "name": "제육덮밥정식",
+            "price_krw": 10000,
+            "source": {
+              "excerpt": "제육덮밥정식 10000원",
+              "observed_on": "2026-08-01",
+              "title": "매장 메뉴판 사진 · pem43guin 방문기 (2026-08 방문, 월초 기준 / 2026-09-09 게시)",
+              "url": "https://blog.naver.com/pem43guin/224401759131"
+            }
+          },
+          "score_breakdown": {
+            "evidence_age_days": 66,
+            "evidence_completeness": 0.142857,
+            "hard_constraints": "pass",
+            "soft_matches": 0,
+            "weather_applied": true,
+            "weather_category": "한식",
+            "weather_score": 0.567
+          },
+          "explanation_method": "qwen_grounded"
+        }
+      ]
+    },
+    {
+      "name": "budget_7000",
+      "endpoint": "/api/recommend",
+      "http_status": 200,
+      "elapsed_ms": 6834,
+      "status": "partial",
+      "budget_krw": 7000,
+      "workflow": {
+        "engine": "langgraph",
+        "steps": [
+          "RESOLVE",
+          "SEARCH_FILTER_RANK",
+          "EXPLAIN",
+          "RESPOND"
+        ],
+        "version": "meal-v2"
+      },
+      "rag": {
+        "attempted": true,
+        "duration_ms": 6306,
+        "evidence_count": 2,
+        "fallback_reason": null,
+        "method": "qwen_grounded",
+        "model": "qwen3.5:9b",
+        "retrieval": "kakao_candidates_then_sql_menu_evidence",
+        "version": "sql-extractive-v1"
+      },
+      "edited_fields": [
+        "budget_krw"
+      ],
+      "diagnostic_counts": {
+        "constraint_mismatch": 2,
+        "expired_evidence": 3,
+        "missing_evidence": 45
+      },
+      "recommendations": [
+        {
+          "name": "사누키제면소",
+          "rank": 1,
+          "menu": {
+            "name": "자루우동",
+            "price_krw": 7000,
+            "source": {
+              "excerpt": "자루우동 7000원",
+              "observed_on": "2026-09-17",
+              "title": "매장 메뉴판 사진 · BOTA 방문기 (2026-09-17 게시)",
+              "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064"
+            }
+          },
+          "score_breakdown": {
+            "evidence_age_days": 19,
+            "evidence_completeness": 0.142857,
+            "hard_constraints": "pass",
+            "soft_matches": 0,
+            "weather_applied": true,
+            "weather_category": "돈까스/일식",
+            "weather_score": 0.567
+          },
+          "explanation_method": "qwen_grounded"
+        }
+      ]
+    },
+    {
+      "name": "no_results_6000",
+      "endpoint": "/api/recommend",
+      "http_status": 200,
+      "elapsed_ms": 364,
+      "status": "no_results",
+      "budget_krw": 6000,
+      "workflow": {
+        "engine": "langgraph",
+        "steps": [
+          "RESOLVE",
+          "SEARCH_FILTER_RANK",
+          "NO_RESULTS"
+        ],
+        "version": "meal-v2"
+      },
+      "edited_fields": [
+        "budget_krw"
+      ],
+      "diagnostic_counts": {
+        "constraint_mismatch": 4,
+        "expired_evidence": 3,
+        "missing_evidence": 45
+      },
+      "recommendations": []
+    },
+    {
+      "name": "model_outage_existing_draft",
+      "endpoint": "/api/recommend",
+      "http_status": 200,
+      "elapsed_ms": 556,
+      "status": "partial",
+      "budget_krw": 15000,
+      "workflow": {
+        "engine": "langgraph",
+        "steps": [
+          "RESOLVE",
+          "SEARCH_FILTER_RANK",
+          "EXPLAIN",
+          "RESPOND"
+        ],
+        "version": "meal-v2"
+      },
+      "rag": {
+        "attempted": true,
+        "duration_ms": 2,
+        "evidence_count": 4,
+        "fallback_reason": "ollama_unavailable",
+        "method": "template",
+        "model": "qwen3.5:9b",
+        "retrieval": "kakao_candidates_then_sql_menu_evidence",
+        "version": "sql-extractive-v1"
+      },
+      "edited_fields": [],
+      "diagnostic_counts": {
+        "constraint_mismatch": 0,
+        "expired_evidence": 3,
+        "missing_evidence": 45
+      },
+      "recommendations": [
+        {
+          "name": "사누키제면소",
+          "rank": 1,
+          "menu": {
+            "name": "자루우동",
+            "price_krw": 7000,
+            "source": {
+              "excerpt": "자루우동 7000원",
+              "observed_on": "2026-09-17",
+              "title": "매장 메뉴판 사진 · BOTA 방문기 (2026-09-17 게시)",
+              "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064"
+            }
+          },
+          "score_breakdown": {
+            "evidence_age_days": 19,
+            "evidence_completeness": 0.142857,
+            "hard_constraints": "pass",
+            "soft_matches": 0,
+            "weather_applied": true,
+            "weather_category": "돈까스/일식",
+            "weather_score": 0.567
+          },
+          "explanation_method": "template"
+        },
+        {
+          "name": "장모님밥상",
+          "rank": 2,
+          "menu": {
+            "name": "제육덮밥정식",
+            "price_krw": 10000,
+            "source": {
+              "excerpt": "제육덮밥정식 10000원",
+              "observed_on": "2026-08-01",
+              "title": "매장 메뉴판 사진 · pem43guin 방문기 (2026-08 방문, 월초 기준 / 2026-09-09 게시)",
+              "url": "https://blog.naver.com/pem43guin/224401759131"
+            }
+          },
+          "score_breakdown": {
+            "evidence_age_days": 66,
+            "evidence_completeness": 0.142857,
+            "hard_constraints": "pass",
+            "soft_matches": 0,
+            "weather_applied": true,
+            "weather_category": "한식",
+            "weather_score": 0.567
+          },
+          "explanation_method": "template"
+        }
+      ]
+    },
+    {
+      "name": "model_outage_new_parse",
+      "endpoint": "/api/constraints",
+      "http_status": 503,
+      "elapsed_ms": 3,
+      "code": "ollama_unavailable",
+      "budget_krw": null
+    },
+    {
+      "name": "model_recovery_parse",
+      "endpoint": "/api/constraints",
+      "http_status": 200,
+      "elapsed_ms": 14875,
+      "status": "review_required",
+      "budget_krw": 15000
+    },
+    {
+      "name": "model_recovery_recommend",
+      "endpoint": "/api/recommend",
+      "http_status": 200,
+      "elapsed_ms": 13577,
+      "status": "partial",
+      "budget_krw": 15000,
+      "workflow": {
+        "engine": "langgraph",
+        "steps": [
+          "RESOLVE",
+          "SEARCH_FILTER_RANK",
+          "EXPLAIN",
+          "RESPOND"
+        ],
+        "version": "meal-v2"
+      },
+      "rag": {
+        "attempted": true,
+        "duration_ms": 13043,
+        "evidence_count": 4,
+        "fallback_reason": null,
+        "method": "qwen_grounded",
+        "model": "qwen3.5:9b",
+        "retrieval": "kakao_candidates_then_sql_menu_evidence",
+        "version": "sql-extractive-v1"
+      },
+      "edited_fields": [],
+      "diagnostic_counts": {
+        "constraint_mismatch": 0,
+        "expired_evidence": 3,
+        "missing_evidence": 45
+      },
+      "recommendations": [
+        {
+          "name": "사누키제면소",
+          "rank": 1,
+          "menu": {
+            "name": "자루우동",
+            "price_krw": 7000,
+            "source": {
+              "excerpt": "자루우동 7000원",
+              "observed_on": "2026-09-17",
+              "title": "매장 메뉴판 사진 · BOTA 방문기 (2026-09-17 게시)",
+              "url": "https://blog.naver.com/ilovecoffeeandcat/224415396064"
+            }
+          },
+          "score_breakdown": {
+            "evidence_age_days": 19,
+            "evidence_completeness": 0.142857,
+            "hard_constraints": "pass",
+            "soft_matches": 0,
+            "weather_applied": true,
+            "weather_category": "돈까스/일식",
+            "weather_score": 0.567
+          },
+          "explanation_method": "qwen_grounded"
+        },
+        {
+          "name": "장모님밥상",
+          "rank": 2,
+          "menu": {
+            "name": "제육덮밥정식",
+            "price_krw": 10000,
+            "source": {
+              "excerpt": "제육덮밥정식 10000원",
+              "observed_on": "2026-08-01",
+              "title": "매장 메뉴판 사진 · pem43guin 방문기 (2026-08 방문, 월초 기준 / 2026-09-09 게시)",
+              "url": "https://blog.naver.com/pem43guin/224401759131"
+            }
+          },
+          "score_breakdown": {
+            "evidence_age_days": 66,
+            "evidence_completeness": 0.142857,
+            "hard_constraints": "pass",
+            "soft_matches": 0,
+            "weather_applied": true,
+            "weather_category": "한식",
+            "weather_score": 0.567
+          },
+          "explanation_method": "qwen_grounded"
+        }
+      ]
+    }
+  ],
+  "ui_checks": {
+    "source_links_and_basis_dates_visible": true,
+    "editing_budget_clears_old_cards": true,
+    "editing_budget_resets_confirmation": true,
+    "edited_budget_requires_reconfirmation": true,
+    "no_results_reasons_visible": true,
+    "no_automatic_constraint_relaxation_observed": true,
+    "model_outage_existing_draft_keeps_menu_prices_and_ranks": true,
+    "model_outage_new_parse_discards_old_draft_and_cards": true,
+    "recovery_parse_and_qwen_recommendation_visible": true
+  },
+  "map": {
+    "javascript_key_configured": false,
+    "rest_key_configured": true,
+    "sdk_requested": false,
+    "registered_domains_verified": false,
+    "map_rendering_verified": false,
+    "list_and_detail_link_fallback_verified": true,
+    "required_origins": [
+      "http://127.0.0.1:8001",
+      "http://127.0.0.1:8000"
+    ],
+    "official_setup_guide": "https://apis.map.kakao.com/web/guide/"
+  },
+  "design": {
+    "location_intent": "increment existing version and clear userPosition before async SDK callback; ignore superseded SDK, GPS, choice and weather responses",
+    "model_failure": "confirmed draft can use existing evidence templates; new draft requires local model and returns 503 if unavailable",
+    "data_isolation": "existing CSV imported into disposable SQLite; persistent app events untouched"
+  },
+  "agency_agents": [
+    {
+      "role": "API Tester",
+      "responsibility": "independent flow and race review",
+      "finding": "pending new SDK location search could submit old coordinates with blank textual location",
+      "resolution": "clear userPosition at search start",
+      "verification": "existing JS regression passes; removing only the fix in memory fails the stale-coordinate assertion; controlled callback ordering, not a real-network race observation"
+    },
+    {
+      "role": "DevOps Automator",
+      "responsibility": "remote difference, workflow coverage and CI evidence review",
+      "finding": "cached origin/main ahead by one README-only commit; existing push/PR workflow covers required checks",
+      "resolution": "retain existing workflow; integrate origin/main after committing task changes"
+    }
+  ],
+  "persistent_database_row_counts": {
+    "before": {
+      "menu_items": 7,
+      "recommendation_requests": 2,
+      "events": 1
+    },
+    "after": {
+      "menu_items": 7,
+      "recommendation_requests": 2,
+      "events": 1
+    }
+  },
+  "local_checks": {
+    "python_unittest": {
+      "passed": 66,
+      "elapsed_s": 3.033
+    },
+    "javascript_regression": "pass",
+    "pip_check": "pass",
+    "synthetic_rf_demo": {
+      "status": "evaluated",
+      "requests": 40,
+      "events": 80,
+      "candidates": 120,
+      "real_user_performance_claim": false
+    }
+  },
+  "sha256": {
+    "static/js/app.js": "4f603af18b62c7a4985f76fa6fdcfb56833c660fa0bc628b8dadc463c5c72d3b",
+    "templates/index.html": "92773a53c166ebfba597a541ecbe434dc46414feedef789db397787f063c6f0e",
+    "test_recommend_flow.js": "4f696dff05768888bb6f49cdca383fcd0d1734fcbd0a70b694a82cc6da5e6d19",
+    "scripts/run_demo.py": "c36819d48a7eae584d3e30ce710f10d9180b15d425058720b771408f377652bb",
+    "data/menu_items.csv": "002a5b30755f4ffc109818fcdfab953985727261412db05feb99f7eb6bdd3dcb"
+  },
+  "screenshots": {
+    "normal": "reports/2026-10-06/screenshots/normal.jpg",
+    "budget-7000": "reports/2026-10-06/screenshots/budget-7000.jpg",
+    "no-results": "reports/2026-10-06/screenshots/no-results.jpg",
+    "model-fallback": "reports/2026-10-06/screenshots/model-fallback.jpg",
+    "model-unavailable": "reports/2026-10-06/screenshots/model-unavailable.jpg",
+    "model-recovered": "reports/2026-10-06/screenshots/model-recovered.jpg",
+    "recovered-normal": "reports/2026-10-06/screenshots/recovered-normal.jpg"
+  },
+  "limitations": [
+    "Map SDK/domain authorization could not be tested without a configured JavaScript key.",
+    "Three Hyangwon menu sources remain expired; no dates or evidence were fabricated.",
+    "The 40-case parser result is reported separately; integration checks do not improve or remeasure extraction accuracy.",
+    "Local single-process demo; no production deployment or load benchmark."
+  ]
+}

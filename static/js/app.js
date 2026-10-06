@@ -8,9 +8,13 @@ window.addEventListener('DOMContentLoaded', () => {
         onError();
         return;
     }
+    const version = locationVersion;
     navigator.geolocation.getCurrentPosition(
-        position => updateAllDataForLocation(position.coords.latitude, position.coords.longitude),
-        onError, {enableHighAccuracy: false, timeout: 15000, maximumAge: 300000}
+        position => {
+            if (version === locationVersion) updateAllDataForLocation(position.coords.latitude, position.coords.longitude);
+        },
+        () => { if (version === locationVersion) onError(); },
+        {enableHighAccuracy: false, timeout: 15000, maximumAge: 300000}
     );
 });
 
@@ -46,6 +50,10 @@ async function updateAllDataForLocation(lat, lon) {
 function searchLocation() {
     const keyword = document.getElementById('location-search-input').value.trim();
     if (!keyword) return;
+    // Claim location intent before the SDK responds: supersedes old searches, weather and GPS.
+    const version = ++locationVersion;
+    userPosition = null;
+    invalidateRecommendations();
     if (!ps) {
         invalidateRecommendations({discardDraft: true});
         document.getElementById('meal-query').value = keyword + '에서 식당 추천해줘';
@@ -53,6 +61,7 @@ function searchLocation() {
         return;
     }
     ps.keywordSearch(keyword, (places, status) => {
+        if (version !== locationVersion) return;
         if (status !== kakao.maps.services.Status.OK) {
             document.getElementById('loading').textContent = '장소를 찾지 못했습니다. 더 구체적인 주소를 입력해주세요.';
             return;
@@ -63,7 +72,9 @@ function searchLocation() {
             places.slice(0, 5).forEach(place => {
                 const button = node('button', place.place_name + ' · ' + place.address_name, 'choice-button');
                 button.type = 'button';
-                button.addEventListener('click', () => updateAllDataForLocation(place.y, place.x));
+                button.addEventListener('click', () => {
+                    if (version === locationVersion) updateAllDataForLocation(place.y, place.x);
+                });
                 container.appendChild(button);
             });
             document.getElementById('recommendation-status').textContent = '검색 기준 장소를 선택해주세요.';

@@ -37,7 +37,10 @@ const get = id => {
 };
 const requests = [];
 const pending = [];
+const startup = {};
 const context = vm.createContext({
+    window: {addEventListener: (event, callback) => startup[event] = callback},
+    navigator: {geolocation: {getCurrentPosition: (success, failure) => { startup.gps = success; startup.gpsError = failure; }}},
     document: {getElementById: get, createElement: tag => new Element(tag)},
     URL, AbortController, crypto: {randomUUID}, removeMarkers() {},
     fetch: (url, options) => {
@@ -46,7 +49,7 @@ const context = vm.createContext({
         return new Promise(resolve => pending.push(resolve));
     }
 });
-for (const file of ['state', 'weather', 'restaurant', 'recommend']) {
+for (const file of ['state', 'weather', 'restaurant', 'recommend', 'app']) {
     vm.runInContext(fs.readFileSync('static/js/' + file + '.js', 'utf8'), context);
 }
 const run = code => vm.runInContext(code, context);
@@ -241,5 +244,50 @@ const finish = async (promise, data, ok = true) => {
     assert(descendants(get('location-options')).some(n => n.textContent.includes('알레르기는 근거 없이 통과시키지 않습니다')));
     run('invalidateRecommendations()');
     assert.equal(get('location-options').children.length, 0, 'old diagnostics clear on edit');
-    console.log('PASS: weather observations, parse/review/search, explicit confirmation, location reuse, stale responses, expiry, feedback, evidence diagnostics, XSS');
+    // Real app.js callbacks: latest location intent beats old SDK results AND startup GPS.
+    startup.DOMContentLoaded(); // Missing map SDK is allowed; captures the GPS callbacks.
+    context.kakao = {maps: {services: {Status: {OK: 'OK'}}}};
+    const locationCallbacks = [];
+    context.locationCallbacks = locationCallbacks;
+    run('ps = {keywordSearch: (query, callback) => locationCallbacks.push({query, callback})}');
+    get('location-search-input').value = '이전 장소';
+    run('searchLocation()');
+    get('location-search-input').value = '최신 장소';
+    run('searchLocation()');
+    locationCallbacks[1].callback([{x: 127, y: 37.5}], 'OK');
+    assert.equal(run('userPosition.lat'), 37.5);
+    const countAfterLatest = requests.length;
+    locationCallbacks[0].callback([{x: 126, y: 35}], 'OK');
+    locationCallbacks[0].callback([], 'ERROR');
+    startup.gps({coords: {latitude: 34, longitude: 125}});
+    startup.gpsError();
+    assert.equal(run('userPosition.lat'), 37.5);
+    assert.equal(requests.length, countAfterLatest, 'stale SDK/GPS callbacks cannot start weather requests');
+    assert(get('loading').textContent.includes('날씨를 확인하고'), 'late GPS error must not overwrite status');
+    const oldWeather = pending.shift();
+    get('location-search-input').value = '여러 장소';
+    run('searchLocation()');
+    locationCallbacks.at(-1).callback([{x: 128, y: 38, place_name: '후보 A', address_name: 'A'},
+                                     {x: 129, y: 36, place_name: '후보 B', address_name: 'B'}], 'OK');
+    const staleChoice = get('location-options').children[0];
+    get('location-search-input').value = '다음 검색';
+    run('searchLocation()');
+    staleChoice.handlers.click();
+    assert.equal(run('userPosition'), null, 'new location intent clears the old origin until selection');
+    context.locationDraft = {...draft, unknown_terms: []};
+    run('constraintDraft = locationDraft; renderConstraintEditor(constraintDraft)');
+    get('edit-location_text').value = '';
+    get('confirm-conditions').checked = true;
+    const waitingForLocation = run('submitRecommendation()');
+    assert.equal(requests.at(-1).json.lat, null, 'pending location search cannot send old latitude');
+    assert.equal(requests.at(-1).json.lon, null, 'pending location search cannot send old longitude');
+    await finish(waitingForLocation, {...result, status: 'clarification_required', recommendations: []});
+    oldWeather({ok: true, json: async () => ({weather: {temp: -99}, location: {name: 'stale'}, recommendations: []})});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.notEqual(get('temperature').textContent, '-99°C');
+    run('ps = undefined');
+    get('location-search-input').value = '강남역';
+    run('searchLocation()');
+    assert.equal(get('meal-query').value, '강남역에서 식당 추천해줘', 'SDK failure still supports textual location');
+    console.log('PASS: weather observations, parse/review/search, explicit confirmation, location/GPS ordering, stale responses, expiry, feedback, evidence diagnostics, XSS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

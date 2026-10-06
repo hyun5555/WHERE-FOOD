@@ -1,0 +1,400 @@
+{
+  "summary": {
+    "cases": 40,
+    "passed": 31,
+    "p50_seconds": 7.1765,
+    "p95_seconds": 9.61,
+    "exact_match_percent": 77.5,
+    "failed": 9,
+    "structural_mismatches": 4,
+    "validation_blocks": 5
+  },
+  "results": [
+    {
+      "case": "budget",
+      "passed": true,
+      "differences": {},
+      "seconds": 13.088,
+      "query": "강남역에서 1만 5천 원 이하 식당"
+    },
+    {
+      "case": "full",
+      "passed": true,
+      "differences": {},
+      "seconds": 12.076,
+      "query": "강남역에서 도보 10분, 1만 5천 원 이하, 얼큰한 국물인데 땅콩은 빼고 조용한 곳"
+    },
+    {
+      "case": "allergy",
+      "passed": true,
+      "differences": {},
+      "seconds": 8.477,
+      "query": "땅콩 알레르기가 있어. 12000원 이하로 추천해줘"
+    },
+    {
+      "case": "exclusion",
+      "passed": false,
+      "differences": {
+        "excluded_ingredients": {
+          "expected": [
+            "우유"
+          ],
+          "actual": []
+        },
+        "excluded_foods": {
+          "expected": [],
+          "actual": [
+            "우유"
+          ]
+        }
+      },
+      "seconds": 8.108,
+      "query": "우유는 빼고 추천해줘",
+      "failure_type": "field_classification",
+      "failure_note": "우유 제외를 식재료 제외 대신 음식 제외로 분류"
+    },
+    {
+      "case": "distance",
+      "passed": true,
+      "differences": {},
+      "seconds": 9.488,
+      "query": "강남역에서 1.2km 이내, 1.5만원 이하"
+    },
+    {
+      "case": "hard_atmosphere",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.755,
+      "query": "반드시 조용한 곳"
+    },
+    {
+      "case": "no_invention",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.073,
+      "query": "식당 추천해줘"
+    },
+    {
+      "case": "no_allergy",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.849,
+      "query": "땅콩 알레르기는 없어. 9000원 이하"
+    },
+    {
+      "case": "vegan",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.559,
+      "query": "비건 메뉴 추천해줘"
+    },
+    {
+      "case": "vegetarian",
+      "passed": true,
+      "differences": {},
+      "seconds": 8.002,
+      "query": "락토오보 채식 메뉴로 추천해줘"
+    },
+    {
+      "case": "pescatarian",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.776,
+      "query": "페스코 식단으로 추천해줘"
+    },
+    {
+      "case": "open_now",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.101,
+      "query": "지금 영업 중인 식당"
+    },
+    {
+      "case": "vegan_open",
+      "passed": true,
+      "differences": {},
+      "seconds": 8.991,
+      "query": "강남역에서 지금 영업 중인 비건 식당, 15000원 이하"
+    },
+    {
+      "case": "two_allergies",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.132,
+      "query": "땅콩과 우유 알레르기가 있어"
+    },
+    {
+      "case": "two_exclusions",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.947,
+      "query": "땅콩과 우유는 빼고"
+    },
+    {
+      "case": "negative_taste",
+      "passed": false,
+      "differences": {
+        "dish_tags": {
+          "expected": [
+            "따뜻한",
+            "국물"
+          ],
+          "actual": [
+            "국물"
+          ]
+        }
+      },
+      "seconds": 7.462,
+      "query": "매운 건 싫지만 따뜻한 국물은 좋아",
+      "failure_type": "missing_preference",
+      "failure_note": "따뜻한 선호 누락"
+    },
+    {
+      "case": "hard_dish",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.221,
+      "query": "반드시 얼큰한 국물"
+    },
+    {
+      "case": "no_open_constraint",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.706,
+      "query": "영업 여부는 상관없어. 10000원 이하"
+    },
+    {
+      "case": "conflicting_budget",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.259,
+      "query": "예산은 10000원 이하와 20000원 이상을 동시에 만족해야 해"
+    },
+    {
+      "case": "unsupported_booking",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.261,
+      "query": "내일 오후 7시에 예약 가능한 곳"
+    },
+    {
+      "case": "holdout_location",
+      "passed": true,
+      "differences": {},
+      "seconds": 8.565,
+      "query": "홍대입구역에서 12000원 이하"
+    },
+    {
+      "case": "holdout_budget_comma",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.346,
+      "query": "15,000원 이하로 추천해줘"
+    },
+    {
+      "case": "holdout_budget_decimal",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.622,
+      "query": "1.2만원 이하 식당"
+    },
+    {
+      "case": "holdout_walk",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.453,
+      "query": "도보 5분 이내"
+    },
+    {
+      "case": "holdout_metres",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.094,
+      "query": "800m 이내 식당"
+    },
+    {
+      "case": "holdout_both_distance",
+      "passed": true,
+      "differences": {},
+      "seconds": 9.61,
+      "query": "도보 10분 이내이고 직선거리 500m 이내"
+    },
+    {
+      "case": "holdout_allergy_exclude",
+      "passed": true,
+      "differences": {},
+      "seconds": 8.439,
+      "query": "해산물 알레르기가 있고 회는 제외"
+    },
+    {
+      "case": "holdout_negation",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.447,
+      "query": "우유 알레르기는 없지만 땅콩 알레르기는 있어"
+    },
+    {
+      "case": "holdout_empty",
+      "passed": true,
+      "differences": {},
+      "seconds": 5.634,
+      "query": "아무거나 추천해줘"
+    },
+    {
+      "case": "holdout_soft_atmosphere",
+      "passed": false,
+      "differences": {
+        "hard_fields": {
+          "expected": [],
+          "actual": [
+            "atmosphere_tags"
+          ]
+        }
+      },
+      "seconds": 6.669,
+      "query": "가능하면 조용한 곳",
+      "failure_type": "soft_as_hard",
+      "failure_note": "가능하면 조용한 곳을 필수 조건으로 해석"
+    },
+    {
+      "case": "holdout_mandatory",
+      "passed": false,
+      "code": "parse_failed",
+      "error": "조건 해석에 실패했습니다. 입력을 확인하고 다시 시도해주세요.",
+      "validation_error": "unanchored extraction",
+      "seconds": 7.867,
+      "query": "꼭 조용한 곳, 18000원 이하",
+      "failure_type": "validation_block",
+      "failure_note": "필수 분위기 원문 근거 대조 실패"
+    },
+    {
+      "case": "holdout_vegan_alias",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.683,
+      "query": "완전채식 메뉴로 추천해줘"
+    },
+    {
+      "case": "holdout_vegetarian",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.49,
+      "query": "채식 메뉴를 먹고 싶어"
+    },
+    {
+      "case": "holdout_open_alias",
+      "passed": true,
+      "differences": {},
+      "seconds": 7.397,
+      "query": "지금 문 연 곳 중 10000원 이하"
+    },
+    {
+      "case": "holdout_future_open",
+      "passed": true,
+      "differences": {},
+      "seconds": 6.376,
+      "query": "내일 오전 9시에 문 여는 곳"
+    },
+    {
+      "case": "holdout_halal",
+      "passed": false,
+      "code": "parse_failed",
+      "error": "조건 해석에 실패했습니다. 입력을 확인하고 다시 시도해주세요.",
+      "validation_error": "unanchored extraction",
+      "seconds": 6.87,
+      "query": "할랄 인증 식당",
+      "failure_type": "validation_block",
+      "failure_note": "미지원 할랄 조건 원문 근거 대조 실패"
+    },
+    {
+      "case": "holdout_under",
+      "passed": false,
+      "code": "parse_failed",
+      "error": "조건 해석에 실패했습니다. 입력을 확인하고 다시 시도해주세요.",
+      "validation_error": "ambiguous bound",
+      "seconds": 6.605,
+      "query": "1만원 미만으로 추천해줘",
+      "failure_type": "validation_block",
+      "failure_note": "미만의 엄격한 숫자 경계 처리 차단"
+    },
+    {
+      "case": "holdout_total_budget",
+      "passed": false,
+      "code": "parse_failed",
+      "error": "조건 해석에 실패했습니다. 입력을 확인하고 다시 시도해주세요.",
+      "validation_error": "unanchored extraction",
+      "seconds": 7.927,
+      "query": "세 명이 합쳐 30000원 이하",
+      "failure_type": "validation_block",
+      "failure_note": "여러 명의 총예산 원문 근거 대조 실패"
+    },
+    {
+      "case": "holdout_flexible_budget",
+      "passed": false,
+      "differences": {
+        "budget_krw": {
+          "expected": null,
+          "actual": 12000
+        }
+      },
+      "seconds": 7.435,
+      "query": "1만원 아래면 좋지만 1만 2천 원까지는 괜찮아",
+      "failure_type": "ambiguous_budget",
+      "failure_note": "유연한 예산을 미지원으로 남기면서 숫자 예산도 채움"
+    },
+    {
+      "case": "holdout_rating",
+      "passed": false,
+      "code": "parse_failed",
+      "error": "조건 해석에 실패했습니다. 입력을 확인하고 다시 시도해주세요.",
+      "validation_error": "missing extraction evidence",
+      "seconds": 6.549,
+      "query": "가까운 곳, 단 평점보다 조용한 분위기가 중요",
+      "failure_type": "validation_block",
+      "failure_note": "상대 선호의 추출 원문 근거 누락"
+    }
+  ],
+  "parser": {
+    "provider": "ollama",
+    "model": "qwen3.5:9b",
+    "version": "qwen3.5-9b-v2",
+    "ready": true,
+    "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7"
+  },
+  "split": "all",
+  "evaluated_at": "2026-10-06T00:28:58.483146+00:00",
+  "prompt_schema_sha256": "d6a3ddea661827881910ecd6789854c7db04d38349c37df11175770777eff1da",
+  "split_summaries": {
+    "dev": {
+      "cases": 20,
+      "passed": 18,
+      "exact_match_percent": 90.0,
+      "p50_seconds": 7.24,
+      "p95_seconds": 12.076
+    },
+    "holdout": {
+      "cases": 20,
+      "passed": 13,
+      "exact_match_percent": 65.0,
+      "p50_seconds": 6.982,
+      "p95_seconds": 8.565
+    }
+  },
+  "measurement": {
+    "command": ".venv/bin/python scripts/evaluate_parser.py --split all --output instance/parser-evaluation-2026-10-06.json",
+    "hardware": "Apple M5 / Metal, Ollama 0.33.0",
+    "runs_per_case": 1,
+    "execution": "40문장 순차 실행, 다른 모델 추론 요청 없이 측정",
+    "latency_scope": "parse_constraints 전체 벽시계 시간; 첫 사례 모델 로딩 및 실패 사례 포함; 장소 검색/추천/RAG 시간 제외",
+    "p95_method": "nearest rank: sorted_times[ceil(0.95 * n) - 1]",
+    "prompt_changed_during_evaluation": false,
+    "script_sha256": "6ab63a1320771c62e313aaeb6be2c70f5bdac1e6a86cb644d0dcf70cdc129d27",
+    "parser_source_sha256": "93b717e1fd0136c9be411e23d38fdcb75e6fae3bd7ac3ba5fbdcd0c011321d5e",
+    "limits": [
+      "수작업 정답 합성 문장 40개에 대한 1회 측정",
+      "이전부터 사용한 고정 검증 세트이며 새 미관측 문장이 아님",
+      "검증 차단을 정답 일치로 집계하지 않음",
+      "실패 결과를 보고 프롬프트나 검증 규칙을 수정하지 않음"
+    ]
+  }
+}
