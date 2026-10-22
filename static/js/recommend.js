@@ -21,7 +21,8 @@ function invalidateRecommendations({discardDraft = false, requireReview = true} 
     selectedOriginPlaceId = null;
     for (const id of ['recommend-submit', 'confirm-search']) document.getElementById(id).disabled = false;
     for (const id of ['recommendation-form', 'constraint-editor-form']) document.getElementById(id).setAttribute('aria-busy', 'false');
-    document.getElementById('map-and-list-section').hidden = true;
+    const mapSection = document.getElementById('map-and-list-section');
+    mapSection.hidden = mapSection.getAttribute('data-map-check') !== 'true';
     for (const id of ['search-results-list', 'parsed-constraints', 'location-options']) document.getElementById(id).replaceChildren();
     for (const id of ['recommendation-status', 'event-status', 'workflow-status']) document.getElementById(id).textContent = '';
     if (requireReview) document.getElementById('confirm-conditions').checked = false;

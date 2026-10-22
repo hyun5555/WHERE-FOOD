@@ -14,7 +14,7 @@ from io import StringIO
 import json
 import os
 
-from app import app, convert_grid, weather_ranking
+from app import app, check_same_origin, convert_grid, weather_ranking
 import db
 import recommendation as rec
 import explanations as rag
@@ -691,6 +691,38 @@ class MealFlowTest(TestCase):
         for endpoint in ("/api/constraints", "/api/recommend"):
             self.assertEqual(self.client.post(endpoint, json={"query": "x"}, headers={"Origin": "https://evil.example"}).status_code, 403)
 
+    def test_demo_logging_preserves_early_origin_rejection(self):
+        from flask import Flask
+        from scripts import run_demo
+
+        demo_app = Flask(__name__)
+        demo_app.testing = True
+        demo_app.before_request(check_same_origin)
+        demo_app.add_url_rule("/api/events", view_func=lambda: ("", 204), methods=["POST"])
+
+        def exercise_requests(**kwargs):
+            client = demo_app.test_client()
+            for endpoint in ("/api/constraints", "/api/recommend", "/api/events"):
+                with self.subTest(endpoint=endpoint):
+                    response = client.post(endpoint, json={}, headers={"Origin": "https://example.invalid"})
+                    self.assertEqual(response.status_code, 403)
+                    self.assertIn("error", response.get_json())
+            self.assertEqual(client.post("/api/events", headers={"Origin": "http://localhost"}).status_code, 204)
+
+        with patch.object(run_demo, "app", demo_app), \
+             patch.object(run_demo, "ROOT", Path(self.temp.name)), \
+             patch.object(run_demo, "import_csv", return_value=0), \
+             patch.object(demo_app, "run", side_effect=exercise_requests), \
+             patch("sys.argv", ["run_demo.py"]), redirect_stdout(StringIO()):
+            run_demo.main()
+
+        output, = (Path(self.temp.name) / "instance/demo").glob("session-*/observations.json")
+        records = json.loads(output.read_text())
+        self.assertEqual([r["http_status"] for r in records], [403, 403, 403, 204])
+        self.assertTrue(all(r["elapsed_ms"] is None for r in records[:3]))
+        self.assertIsInstance(records[-1]["elapsed_ms"], int)
+        self.assertGreaterEqual(records[-1]["elapsed_ms"], 0)
+
     def test_local_parser_ignores_cloud_keys_hosts_and_proxies(self):
         parsed = constraints(location_text="강남역", walking_minutes_max=None, budget_krw=15000,
                              excluded_ingredients=[], dish_tags=[], atmosphere_tags=[], source_spans=[
@@ -810,7 +842,7 @@ class MealFlowTest(TestCase):
                 self.assertFalse(rec.PARSER_LOCK.locked())
 
     def test_missing_map_key_does_not_load_someone_elses_key(self):
-        for configured in (None, ""):
+        for configured in (None, "", "  "):
             with patch.dict(os.environ, {}, clear=False):
                 if configured is None:
                     os.environ.pop("KAKAO_JAVASCRIPT_KEY", None)
@@ -818,6 +850,15 @@ class MealFlowTest(TestCase):
                     os.environ["KAKAO_JAVASCRIPT_KEY"] = configured
                 page = self.client.get("/").get_data(as_text=True)
                 self.assertNotIn("maps/sdk.js", page)
+        with patch.dict(os.environ, {"KAKAO_JAVASCRIPT_KEY": "  test-only-js-key  "}):
+            for checking in (False, True):
+                with patch.dict(app.config, {"MAP_CHECK_MODE": checking}):
+                    page = self.client.get("/").get_data(as_text=True)
+                    self.assertIn("appkey=test-only-js-key&libraries=services", page)
+                    self.assertIn('data-map-check="' + str(checking).lower() + '"', page)
+                    self.assertEqual('id="map-check-status"' in page, checking)
+                    section = page.split('id="map-and-list-section"', 1)[1].split('>', 1)[0]
+                    self.assertEqual(" hidden" in section, not checking)
 
     def test_location_choice_is_revalidated(self):
         c = constraints(location_text="강남역")
